@@ -1,0 +1,34 @@
+name: YKImageEditorExample
+options:
+  bundleIdPrefix: com.yakamoz
+  deploymentTarget:
+    iOS: "15.0"
+  xcodeVersion: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2"
+packages:
+  YKImageEditor:
+    path: ../
+targets:
+  YKImageEditorExample:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yakamoz.YKImageEditorExample
+        INFOPLIST_GENERATION_MODE: GeneratedFile
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 选择图片进行编辑
+        INFOPLIST_KEY_NSCameraUsageDescription: 拍照后进行编辑
+    dependencies:
+      - package: YKImageEditor
+        product: YKImageEditorUI
+      - package: YKImageEditor
+        product: YKImageEditorCore
+      - sdk: UIKit.framework
