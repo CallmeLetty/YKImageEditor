@@ -16,6 +16,7 @@ public final class ImageEditorViewController: UIViewController {
     private let canvas = EditorCanvasView()
     private let topBar = UIView()
     private let bottomBar = UIView()
+    private let blendPanel = BlendToolPanel()
     private let toolStack = UIStackView()
     private let colorStack = UIStackView()
     private var selectedTool: EditorTool?
@@ -77,10 +78,13 @@ public final class ImageEditorViewController: UIViewController {
         view.addSubview(canvas)
         view.addSubview(topBar)
         view.addSubview(bottomBar)
+        view.addSubview(blendPanel)
 
         canvas.translatesAutoresizingMaskIntoConstraints = false
         topBar.translatesAutoresizingMaskIntoConstraints = false
         bottomBar.translatesAutoresizingMaskIntoConstraints = false
+        blendPanel.translatesAutoresizingMaskIntoConstraints = false
+        blendPanel.delegate = self
 
         buildTopBar()
         buildBottomBar()
@@ -95,6 +99,11 @@ public final class ImageEditorViewController: UIViewController {
             bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             bottomBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             bottomBar.heightAnchor.constraint(equalToConstant: 110),
+
+            blendPanel.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            blendPanel.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            blendPanel.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            blendPanel.heightAnchor.constraint(equalToConstant: 150),
 
             canvas.topAnchor.constraint(equalTo: topBar.bottomAnchor),
             canvas.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -198,6 +207,11 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     private func selectTool(_ tool: EditorTool?) {
+        if selectedTool == .blend, tool != .blend, !blendPanel.isHidden {
+            blendPanel.dismissPanel()
+            bottomBar.isHidden = false
+        }
+
         selectedTool = tool
         canvas.doodleView.isHidden = tool != .doodle
         canvas.mosaicMaskView.isHidden = tool != .mosaic
@@ -216,6 +230,8 @@ public final class ImageEditorViewController: UIViewController {
             promptText()
         } else if tool == .sticker {
             presentStickers()
+        } else if tool == .blend {
+            presentBlend()
         }
     }
 
@@ -225,7 +241,18 @@ public final class ImageEditorViewController: UIViewController {
         if selectedTool == .doodle || selectedTool == .mosaic {
             applyTransientDrawingIfNeeded()
         }
+        if selectedTool == .blend, tool != .blend {
+            blendPanel.dismissPanel()
+            bottomBar.isHidden = false
+        }
         selectTool(tool)
+    }
+
+    private func presentBlend() {
+        applyTransientDrawingIfNeeded()
+        flattenTransformableOverlays()
+        bottomBar.isHidden = true
+        blendPanel.present(with: session.currentImage)
     }
 
     @objc private func colorTapped(_ sender: UIButton) {
@@ -348,6 +375,10 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     @objc private func undoTapped() {
+        if !blendPanel.isHidden {
+            blendPanel.dismissPanel()
+            bottomBar.isHidden = false
+        }
         applyTransientDrawingIfNeeded()
         if let image = session.undo() {
             canvas.clearTransientOverlays()
@@ -356,6 +387,10 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     @objc private func redoTapped() {
+        if !blendPanel.isHidden {
+            blendPanel.dismissPanel()
+            bottomBar.isHidden = false
+        }
         if let image = session.redo() {
             canvas.clearTransientOverlays()
             canvas.setImage(image)
@@ -363,6 +398,10 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     @objc private func cancelTapped() {
+        if !blendPanel.isHidden {
+            blendPanel.dismissPanel()
+            bottomBar.isHidden = false
+        }
         applyTransientDrawingIfNeeded()
         let hasOverlays = canvas.overlayContainer.subviews.contains {
             !($0 is DoodleDrawView || $0 is MosaicMaskView)
@@ -384,6 +423,11 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     @objc private func doneTapped() {
+        if !blendPanel.isHidden {
+            // 完成时丢弃未应用的混合预览
+            blendPanel.dismissPanel()
+            bottomBar.isHidden = false
+        }
         applyTransientDrawingIfNeeded()
         flattenTransformableOverlays()
         let exported = session.makeExportImage(options: config.exportOptions)
@@ -432,5 +476,25 @@ extension ImageEditorViewController: CropToolViewControllerDelegate {
         controller.dismiss(animated: true) { [weak self] in
             self?.selectTool(self?.availableTools.first { $0 != .crop })
         }
+    }
+}
+
+extension ImageEditorViewController: BlendToolPanelDelegate {
+    func blendToolPanel(_ panel: BlendToolPanel, didUpdatePreview effect: UIImage?, intensity: CGFloat) {
+        canvas.setBlendPreview(effect: effect, intensity: intensity)
+    }
+
+    func blendToolPanel(_ panel: BlendToolPanel, didApply image: UIImage) {
+        session.commit(image)
+        canvas.setBlendPreview(effect: nil, intensity: 0)
+        canvas.setImage(session.currentImage)
+        bottomBar.isHidden = false
+        selectTool(availableTools.first { $0 != .blend })
+    }
+
+    func blendToolPanelDidCancel(_ panel: BlendToolPanel) {
+        canvas.setBlendPreview(effect: nil, intensity: 0)
+        bottomBar.isHidden = false
+        selectTool(availableTools.first { $0 != .blend })
     }
 }

@@ -4,8 +4,8 @@
 
 ## Modules
 
-- `YKImageEditorCore`：几何变换、马赛克、导出、会话状态
-- `YKImageEditorUI`：UIKit 编辑器界面
+- `YKImageEditorCore`：几何变换、马赛克、混合模式叠色、导出、会话状态
+- `YKImageEditorUI`：UIKit 编辑器界面（含混合预设实时预览）
 
 ## Requirements
 
@@ -32,6 +32,13 @@ let config = EditorConfig.including([.crop, .text])
 
 // 去掉马赛克
 let config2 = EditorConfig.excluding([.mosaic])
+
+// 只要裁剪 + 混合调色
+let config3 = EditorConfig.including([.crop, .blend])
+
+// 程序化混合（无需 UI）
+let toned = ImageBlender.blend(base: image, preset: .warmColorBurn, intensity: 0.7)
+let multiplied = ImageBlender.blend(base: image, color: .orange, mode: .multiply, opacity: 0.5)
 
 // 贴纸需注入
 let stickers = ClosureStickerProvider { [UIImage(systemName: "star.fill")!] }

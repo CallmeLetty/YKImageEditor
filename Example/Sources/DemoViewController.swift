@@ -27,12 +27,12 @@ final class DemoViewController: UIViewController, UIImagePickerControllerDelegat
         resultLabel.numberOfLines = 0
         resultLabel.text = "选择一张图片开始编辑"
 
-        let editAll = makeButton("编辑（全部功能）", action: #selector(editAll))
-        let editCropText = makeButton("编辑（仅裁剪+文字）", action: #selector(editCropText))
-        let editExclude = makeButton("编辑（排除马赛克）", action: #selector(editExcludeMosaic))
+        let editAll = makeButton("全部", action: #selector(editAll))
+        let editOriginal = makeButton("裁剪/涂鸦/文字/马赛克/贴纸", action: #selector(editOriginalFeatures))
+        let editBlend = makeButton("混合", action: #selector(editBlendOnly))
 
         let stack = UIStackView(arrangedSubviews: [
-            preview, resultLabel, editAll, editCropText, editExclude
+            preview, resultLabel, editAll, editOriginal, editBlend
         ])
         stack.axis = .vertical
         stack.spacing = 12
@@ -63,16 +63,19 @@ final class DemoViewController: UIViewController, UIImagePickerControllerDelegat
         present(picker, animated: true)
     }
 
+    /// 全部功能（含混合）。
     @objc private func editAll() {
         openEditor(config: .all)
     }
 
-    @objc private func editCropText() {
-        openEditor(config: .including([.crop, .text]))
+    /// 原本能力：裁剪 / 涂鸦 / 文字 / 马赛克 / 贴纸（不含混合）。
+    @objc private func editOriginalFeatures() {
+        openEditor(config: .excluding([.blend]))
     }
 
-    @objc private func editExcludeMosaic() {
-        openEditor(config: .excluding([.mosaic]))
+    /// 仅混合调色。
+    @objc private func editBlendOnly() {
+        openEditor(config: .including([.blend]))
     }
 
     private func openEditor(config: EditorConfig) {
