@@ -67,6 +67,29 @@ final class YKImageEditorCoreTests: XCTestCase {
         XCTAssertNotNil(mosaicked.cgImage)
     }
 
+    func testMosaicMaskedDoesNotFlipImage() {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let split = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64), format: format).image { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 32))
+            UIColor.blue.setFill()
+            ctx.fill(CGRect(x: 0, y: 32, width: 64, height: 32))
+        }
+        // 仅遮罩中心一小块，其余应保持原方向
+        let mask = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64), format: format).image { ctx in
+            UIColor.clear.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+            UIColor.white.setFill()
+            ctx.fill(CGRect(x: 24, y: 24, width: 16, height: 16))
+        }
+        let result = MosaicProcessor.pixelate(split, blockSize: 8, mask: mask)
+        let top = rgb(pixelColor(of: result, at: CGPoint(x: 32, y: 4)))
+        let bottom = rgb(pixelColor(of: result, at: CGPoint(x: 32, y: 60)))
+        XCTAssertGreaterThan(top.r, 0.8, "mosaic flip? top=\(top)")
+        XCTAssertGreaterThan(bottom.b, 0.8, "mosaic flip? bottom=\(bottom)")
+    }
+
     func testExportJPEG() {
         let image = makeImage(width: 200, height: 100, color: .cyan)
         let data = ImageExporter.exportData(

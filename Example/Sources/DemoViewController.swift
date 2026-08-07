@@ -5,17 +5,13 @@ import YKImageEditorUI
 final class DemoViewController: UIViewController, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     private let preview = UIImageView()
     private let resultLabel = UILabel()
+    private let pickButton = UIButton(type: .system)
+    private let editButton = UIButton(type: .system)
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "YKImageEditor Example"
         view.backgroundColor = .systemBackground
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: "选图",
-            style: .plain,
-            target: self,
-            action: #selector(pickImage)
-        )
 
         preview.contentMode = .scaleAspectFit
         preview.backgroundColor = .secondarySystemBackground
@@ -25,15 +21,15 @@ final class DemoViewController: UIViewController, UIImagePickerControllerDelegat
         resultLabel.textAlignment = .center
         resultLabel.textColor = .secondaryLabel
         resultLabel.numberOfLines = 0
-        resultLabel.text = "选择一张图片开始编辑"
+        resultLabel.text = "请先选择一张图片"
 
-        let editAll = makeButton("全部", action: #selector(editAll))
-        let editOriginal = makeButton("裁剪/涂鸦/文字/马赛克/贴纸", action: #selector(editOriginalFeatures))
-        let editBlend = makeButton("混合", action: #selector(editBlendOnly))
-        let editLiquify = makeButton("液化（推移）", action: #selector(editLiquifyOnly))
+        configureButton(pickButton, title: "选择图片", action: #selector(pickImage))
+        configureButton(editButton, title: "开始编辑", action: #selector(editTapped))
+        editButton.isEnabled = false
+        editButton.alpha = 0.4
 
         let stack = UIStackView(arrangedSubviews: [
-            preview, resultLabel, editAll, editOriginal, editBlend, editLiquify
+            preview, resultLabel, pickButton, editButton
         ])
         stack.axis = .vertical
         stack.spacing = 12
@@ -45,16 +41,14 @@ final class DemoViewController: UIViewController, UIImagePickerControllerDelegat
             stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
-            preview.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.35)
+            preview.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.45)
         ])
     }
 
-    private func makeButton(_ title: String, action: Selector) -> UIButton {
-        let button = UIButton(type: .system)
+    private func configureButton(_ button: UIButton, title: String, action: Selector) {
         button.setTitle(title, for: .normal)
         button.titleLabel?.font = .boldSystemFont(ofSize: 16)
         button.addTarget(self, action: action, for: .touchUpInside)
-        return button
     }
 
     @objc private func pickImage() {
@@ -64,28 +58,11 @@ final class DemoViewController: UIViewController, UIImagePickerControllerDelegat
         present(picker, animated: true)
     }
 
-    /// 全部功能（含混合）。
-    @objc private func editAll() {
-        openEditor(config: .all)
-    }
-
-    /// 原本能力：裁剪 / 涂鸦 / 文字 / 马赛克 / 贴纸（不含混合、液化）。
-    @objc private func editOriginalFeatures() {
-        openEditor(config: .excluding([.blend, .liquify]))
-    }
-
-    /// 仅混合调色。
-    @objc private func editBlendOnly() {
-        openEditor(config: .including([.blend]))
-    }
-
-    /// 仅液化塑形。
-    @objc private func editLiquifyOnly() {
-        openEditor(config: .including([.liquify]))
-    }
-
-    private func openEditor(config: EditorConfig) {
-        let sample = preview.image ?? makeSampleImage()
+    @objc private func editTapped() {
+        guard let image = preview.image else {
+            resultLabel.text = "请先选择一张图片"
+            return
+        }
         let stickers = ClosureStickerProvider {
             [
                 UIImage(systemName: "star.fill"),
@@ -94,8 +71,8 @@ final class DemoViewController: UIViewController, UIImagePickerControllerDelegat
             ].compactMap { $0?.withTintColor(.systemYellow, renderingMode: .alwaysOriginal) }
         }
         yk_presentImageEditor(
-            image: sample,
-            config: config,
+            image: image,
+            config: .all,
             stickerProvider: stickers
         ) { [weak self] result in
             switch result {
@@ -108,30 +85,22 @@ final class DemoViewController: UIViewController, UIImagePickerControllerDelegat
         }
     }
 
-    private func makeSampleImage() -> UIImage {
-        let size = CGSize(width: 1200, height: 800)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { context in
-            UIColor.systemTeal.setFill()
-            context.fill(CGRect(origin: .zero, size: size))
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.alignment = .center
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.boldSystemFont(ofSize: 48),
-                .foregroundColor: UIColor.white,
-                .paragraphStyle: paragraph
-            ]
-            let text = "YKImageEditor\nSample"
-            text.draw(in: CGRect(x: 0, y: size.height / 2 - 60, width: size.width, height: 120), withAttributes: attrs)
-        }
-    }
-
     func imagePickerController(
         _ picker: UIImagePickerController,
         didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
     ) {
         picker.dismiss(animated: true)
-        preview.image = info[.originalImage] as? UIImage
-        resultLabel.text = "已选图，点击下方按钮编辑"
+        guard let image = info[.originalImage] as? UIImage else {
+            resultLabel.text = "选图失败，请重试"
+            return
+        }
+        preview.image = image
+        editButton.isEnabled = true
+        editButton.alpha = 1
+        resultLabel.text = "已选图，可开始编辑"
+    }
+
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
     }
 }

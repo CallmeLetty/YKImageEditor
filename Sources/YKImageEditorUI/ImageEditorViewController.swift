@@ -1,7 +1,7 @@
 import UIKit
 import YKImageEditorCore
 
-/// 微信风格图片编辑会话控制器。
+/// 图片编辑会话控制器（醒图式深色工具栏）。
 ///
 /// 通过 ``UIViewController/yk_presentImageEditor(image:config:stickerProvider:animated:completion:)``
 /// 或直接初始化后由宿主 `present` / `push`。
@@ -15,25 +15,23 @@ public final class ImageEditorViewController: UIViewController {
 
     private let canvas = EditorCanvasView()
     private let topBar = UIView()
-    private let bottomBar = UIView()
+    private let dock = UIView()
+    private let secondaryHost = UIView()
+    private let categoryBar = ToolCategoryBar()
     private let blendPanel = BlendToolPanel()
     private let liquifyPanel = LiquifyToolPanel()
     private let liquifyBrushView = LiquifyBrushView()
-    private let toolStack = UIStackView()
     private let colorStack = UIStackView()
+    private let colorHost = UIView()
     private var selectedTool: EditorTool?
     private var availableTools: [EditorTool] = []
+    private var secondaryHeightConstraint: NSLayoutConstraint?
 
     private let doodleColors: [UIColor] = [
         .systemRed, .systemOrange, .systemYellow, .systemGreen,
         .systemBlue, .white, .black
     ]
 
-    /// - Parameters:
-    ///   - image: 待编辑图片。
-    ///   - config: 功能与导出配置。
-    ///   - stickerProvider: 贴纸素材提供者；为 `nil` 时隐藏贴纸。
-    ///   - completion: 结束回调，主线程触发。
     public init(
         image: UIImage,
         config: EditorConfig = .all,
@@ -58,7 +56,7 @@ public final class ImageEditorViewController: UIViewController {
 
     public override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .black
+        view.backgroundColor = EditorTheme.background
         configureTools()
         buildLayout()
         canvas.setImage(session.currentImage)
@@ -80,77 +78,114 @@ public final class ImageEditorViewController: UIViewController {
         view.addSubview(canvas)
         view.addSubview(liquifyBrushView)
         view.addSubview(topBar)
-        view.addSubview(bottomBar)
-        view.addSubview(blendPanel)
-        view.addSubview(liquifyPanel)
+        view.addSubview(dock)
+
+        dock.backgroundColor = EditorTheme.panel
+        secondaryHost.backgroundColor = EditorTheme.panel
+        secondaryHost.clipsToBounds = true
+
+        dock.addSubview(secondaryHost)
+        dock.addSubview(categoryBar)
+        secondaryHost.addSubview(colorHost)
+        secondaryHost.addSubview(blendPanel)
+        secondaryHost.addSubview(liquifyPanel)
 
         canvas.translatesAutoresizingMaskIntoConstraints = false
         liquifyBrushView.translatesAutoresizingMaskIntoConstraints = false
         topBar.translatesAutoresizingMaskIntoConstraints = false
-        bottomBar.translatesAutoresizingMaskIntoConstraints = false
+        dock.translatesAutoresizingMaskIntoConstraints = false
+        secondaryHost.translatesAutoresizingMaskIntoConstraints = false
+        categoryBar.translatesAutoresizingMaskIntoConstraints = false
+        colorHost.translatesAutoresizingMaskIntoConstraints = false
         blendPanel.translatesAutoresizingMaskIntoConstraints = false
         liquifyPanel.translatesAutoresizingMaskIntoConstraints = false
+
         blendPanel.delegate = self
         liquifyPanel.delegate = self
         liquifyBrushView.delegate = self
+        categoryBar.delegate = self
+        categoryBar.configure(tools: availableTools)
 
         buildTopBar()
-        buildBottomBar()
+        buildColorHost()
+
+        let secondaryHeight = secondaryHost.heightAnchor.constraint(equalToConstant: 0)
+        secondaryHeightConstraint = secondaryHeight
 
         NSLayoutConstraint.activate([
             topBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            topBar.heightAnchor.constraint(equalToConstant: 44),
+            topBar.heightAnchor.constraint(equalToConstant: EditorTheme.topBarHeight),
 
-            bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            bottomBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            bottomBar.heightAnchor.constraint(equalToConstant: 110),
+            dock.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            dock.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            dock.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            blendPanel.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            blendPanel.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            blendPanel.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            blendPanel.heightAnchor.constraint(equalToConstant: 150),
+            categoryBar.leadingAnchor.constraint(equalTo: dock.leadingAnchor),
+            categoryBar.trailingAnchor.constraint(equalTo: dock.trailingAnchor),
+            categoryBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            categoryBar.heightAnchor.constraint(equalToConstant: EditorTheme.categoryHeight),
 
-            liquifyPanel.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            liquifyPanel.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            liquifyPanel.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            liquifyPanel.heightAnchor.constraint(equalToConstant: 150),
+            secondaryHost.leadingAnchor.constraint(equalTo: dock.leadingAnchor),
+            secondaryHost.trailingAnchor.constraint(equalTo: dock.trailingAnchor),
+            secondaryHost.bottomAnchor.constraint(equalTo: categoryBar.topAnchor),
+            secondaryHost.topAnchor.constraint(equalTo: dock.topAnchor),
+            secondaryHeight,
 
             canvas.topAnchor.constraint(equalTo: topBar.bottomAnchor),
             canvas.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             canvas.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            canvas.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
+            canvas.bottomAnchor.constraint(equalTo: dock.topAnchor),
 
             liquifyBrushView.topAnchor.constraint(equalTo: canvas.topAnchor),
             liquifyBrushView.leadingAnchor.constraint(equalTo: canvas.leadingAnchor),
             liquifyBrushView.trailingAnchor.constraint(equalTo: canvas.trailingAnchor),
-            liquifyBrushView.bottomAnchor.constraint(equalTo: canvas.bottomAnchor)
+            liquifyBrushView.bottomAnchor.constraint(equalTo: canvas.bottomAnchor),
+
+            colorHost.topAnchor.constraint(equalTo: secondaryHost.topAnchor),
+            colorHost.leadingAnchor.constraint(equalTo: secondaryHost.leadingAnchor),
+            colorHost.trailingAnchor.constraint(equalTo: secondaryHost.trailingAnchor),
+            colorHost.bottomAnchor.constraint(equalTo: secondaryHost.bottomAnchor),
+
+            blendPanel.topAnchor.constraint(equalTo: secondaryHost.topAnchor),
+            blendPanel.leadingAnchor.constraint(equalTo: secondaryHost.leadingAnchor),
+            blendPanel.trailingAnchor.constraint(equalTo: secondaryHost.trailingAnchor),
+            blendPanel.bottomAnchor.constraint(equalTo: secondaryHost.bottomAnchor),
+
+            liquifyPanel.topAnchor.constraint(equalTo: secondaryHost.topAnchor),
+            liquifyPanel.leadingAnchor.constraint(equalTo: secondaryHost.leadingAnchor),
+            liquifyPanel.trailingAnchor.constraint(equalTo: secondaryHost.trailingAnchor),
+            liquifyPanel.bottomAnchor.constraint(equalTo: secondaryHost.bottomAnchor)
         ])
     }
 
-
     private func buildTopBar() {
+        topBar.backgroundColor = EditorTheme.panel
+
         let cancel = UIButton(type: .system)
-        cancel.setTitle("取消", for: .normal)
-        cancel.setTitleColor(.white, for: .normal)
+        let closeConfig = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        cancel.setImage(UIImage(systemName: "xmark", withConfiguration: closeConfig), for: .normal)
+        cancel.tintColor = EditorTheme.primaryText
         cancel.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
 
         let undo = UIButton(type: .system)
-        undo.setTitle("撤销", for: .normal)
-        undo.setTitleColor(.white, for: .normal)
+        undo.setImage(UIImage(systemName: "arrow.uturn.backward", withConfiguration: closeConfig), for: .normal)
+        undo.tintColor = EditorTheme.primaryText
         undo.addTarget(self, action: #selector(undoTapped), for: .touchUpInside)
 
         let redo = UIButton(type: .system)
-        redo.setTitle("重做", for: .normal)
-        redo.setTitleColor(.white, for: .normal)
+        redo.setImage(UIImage(systemName: "arrow.uturn.forward", withConfiguration: closeConfig), for: .normal)
+        redo.tintColor = EditorTheme.primaryText
         redo.addTarget(self, action: #selector(redoTapped), for: .touchUpInside)
 
         let done = UIButton(type: .system)
-        done.setTitle("完成", for: .normal)
-        done.setTitleColor(.systemGreen, for: .normal)
-        done.titleLabel?.font = .boldSystemFont(ofSize: 17)
+        done.setTitle("导出", for: .normal)
+        done.setTitleColor(EditorTheme.accentText, for: .normal)
+        done.titleLabel?.font = .systemFont(ofSize: 15, weight: .bold)
+        done.backgroundColor = EditorTheme.accent
+        done.layer.cornerRadius = 16
+        done.contentEdgeInsets = UIEdgeInsets(top: 7, left: 16, bottom: 7, right: 16)
         done.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
 
         [cancel, undo, redo, done].forEach {
@@ -159,135 +194,146 @@ public final class ImageEditorViewController: UIViewController {
         }
 
         NSLayoutConstraint.activate([
-            cancel.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 16),
+            cancel.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 14),
             cancel.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
-            undo.leadingAnchor.constraint(equalTo: cancel.trailingAnchor, constant: 16),
+            cancel.widthAnchor.constraint(equalToConstant: 36),
+            cancel.heightAnchor.constraint(equalToConstant: 36),
+
+            undo.leadingAnchor.constraint(equalTo: cancel.trailingAnchor, constant: 8),
             undo.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
-            redo.leadingAnchor.constraint(equalTo: undo.trailingAnchor, constant: 12),
+            undo.widthAnchor.constraint(equalToConstant: 36),
+            undo.heightAnchor.constraint(equalToConstant: 36),
+
+            redo.leadingAnchor.constraint(equalTo: undo.trailingAnchor, constant: 2),
             redo.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
-            done.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -16),
+            redo.widthAnchor.constraint(equalToConstant: 36),
+            redo.heightAnchor.constraint(equalToConstant: 36),
+
+            done.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -14),
             done.centerYAnchor.constraint(equalTo: topBar.centerYAnchor)
         ])
     }
 
-    private func buildBottomBar() {
-        bottomBar.backgroundColor = UIColor.black.withAlphaComponent(0.85)
-
-        toolStack.axis = .horizontal
-        toolStack.distribution = .fillEqually
-        toolStack.alignment = .center
-
-        for tool in availableTools {
-            let button = UIButton(type: .system)
-            button.setTitle(tool.title, for: .normal)
-            button.setTitleColor(.white, for: .normal)
-            button.titleLabel?.font = .systemFont(ofSize: 14)
-            button.tag = tool.rawValue
-            button.addTarget(self, action: #selector(toolTapped(_:)), for: .touchUpInside)
-            toolStack.addArrangedSubview(button)
-        }
+    private func buildColorHost() {
+        colorHost.backgroundColor = EditorTheme.panel
+        colorHost.isHidden = true
 
         colorStack.axis = .horizontal
-        colorStack.spacing = 10
+        colorStack.spacing = 12
         colorStack.alignment = .center
         colorStack.distribution = .equalSpacing
+
         for (index, color) in doodleColors.enumerated() {
             let button = UIButton(type: .custom)
             button.backgroundColor = color
-            button.layer.cornerRadius = 12
+            button.layer.cornerRadius = 13
             button.layer.borderWidth = 2
-            button.layer.borderColor = UIColor.white.cgColor
+            button.layer.borderColor = UIColor.white.withAlphaComponent(0.85).cgColor
             button.tag = index
             button.addTarget(self, action: #selector(colorTapped(_:)), for: .touchUpInside)
             button.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([
-                button.widthAnchor.constraint(equalToConstant: 24),
-                button.heightAnchor.constraint(equalToConstant: 24)
+                button.widthAnchor.constraint(equalToConstant: 26),
+                button.heightAnchor.constraint(equalToConstant: 26)
             ])
             colorStack.addArrangedSubview(button)
         }
 
         let applyButton = UIButton(type: .system)
-        applyButton.setTitle("应用当前图层", for: .normal)
-        applyButton.setTitleColor(.systemGreen, for: .normal)
+        applyButton.setTitle("应用图层", for: .normal)
+        applyButton.setTitleColor(EditorTheme.accentText, for: .normal)
+        applyButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
+        applyButton.backgroundColor = EditorTheme.accent
+        applyButton.layer.cornerRadius = 14
+        applyButton.contentEdgeInsets = UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
         applyButton.addTarget(self, action: #selector(applyOverlaysTapped), for: .touchUpInside)
 
-        let stack = UIStackView(arrangedSubviews: [colorStack, toolStack, applyButton])
-        stack.axis = .vertical
-        stack.spacing = 8
-        stack.alignment = .center
-        bottomBar.addSubview(stack)
-        stack.translatesAutoresizingMaskIntoConstraints = false
+        let row = UIStackView(arrangedSubviews: [colorStack, applyButton])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.spacing = 16
+        colorHost.addSubview(row)
+        row.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 12),
-            stack.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -12),
-            stack.centerYAnchor.constraint(equalTo: bottomBar.centerYAnchor)
+            row.leadingAnchor.constraint(equalTo: colorHost.leadingAnchor, constant: 16),
+            row.trailingAnchor.constraint(lessThanOrEqualTo: colorHost.trailingAnchor, constant: -16),
+            row.centerYAnchor.constraint(equalTo: colorHost.centerYAnchor)
         ])
+    }
+
+    private func setSecondaryHeight(_ height: CGFloat) {
+        secondaryHeightConstraint?.constant = height
+        UIView.animate(withDuration: 0.2) {
+            self.view.layoutIfNeeded()
+        }
     }
 
     private func selectTool(_ tool: EditorTool?) {
         dismissTransientPanels(except: tool)
 
         selectedTool = tool
+        categoryBar.select(tool)
         canvas.doodleView.isHidden = tool != .doodle
         canvas.mosaicMaskView.isHidden = tool != .mosaic
-        colorStack.isHidden = !(tool == .doodle || tool == .text)
         canvas.doodleView.isUserInteractionEnabled = tool == .doodle
         canvas.mosaicMaskView.isUserInteractionEnabled = tool == .mosaic
         liquifyBrushView.setActive(tool == .liquify)
 
-        for case let button as UIButton in toolStack.arrangedSubviews {
-            let isSelected = button.tag == tool?.rawValue
-            button.setTitleColor(isSelected ? .systemGreen : .white, for: .normal)
-        }
+        let showColors = tool == .doodle || tool == .text
+        colorHost.isHidden = !showColors
 
         if tool == .crop {
+            setSecondaryHeight(0)
             presentCrop()
         } else if tool == .text {
+            setSecondaryHeight(52)
             promptText()
         } else if tool == .sticker {
+            setSecondaryHeight(0)
             presentStickers()
         } else if tool == .blend {
             presentBlend()
         } else if tool == .liquify {
             presentLiquify()
+        } else if tool == .doodle {
+            setSecondaryHeight(52)
+        } else if tool == .mosaic {
+            setSecondaryHeight(0)
+        } else {
+            setSecondaryHeight(0)
         }
-    }
-
-    @objc private func toolTapped(_ sender: UIButton) {
-        guard let tool = EditorTool(rawValue: sender.tag) else { return }
-        // 切换工具前先把涂鸦/马赛克提交进会话，避免丢失。
-        if selectedTool == .doodle || selectedTool == .mosaic {
-            applyTransientDrawingIfNeeded()
-        }
-        selectTool(tool)
     }
 
     private func dismissTransientPanels(except tool: EditorTool?) {
         if tool != .blend, !blendPanel.isHidden {
             blendPanel.dismissPanel()
-            bottomBar.isHidden = false
             canvas.setBlendPreview(effect: nil, intensity: 0)
         }
         if tool != .liquify, !liquifyPanel.isHidden {
             liquifyPanel.dismissPanel()
-            bottomBar.isHidden = false
             liquifyBrushView.setActive(false)
             canvas.setPreviewImage(nil)
+        }
+        if tool != .doodle, tool != .text {
+            colorHost.isHidden = true
         }
     }
 
     private func presentBlend() {
         applyTransientDrawingIfNeeded()
         flattenTransformableOverlays()
-        bottomBar.isHidden = true
+        colorHost.isHidden = true
+        liquifyPanel.isHidden = true
+        setSecondaryHeight(148)
         blendPanel.present(with: session.currentImage)
     }
 
     private func presentLiquify() {
         applyTransientDrawingIfNeeded()
         flattenTransformableOverlays()
-        bottomBar.isHidden = true
+        colorHost.isHidden = true
+        blendPanel.isHidden = true
+        setSecondaryHeight(132)
         liquifyBrushView.setActive(true)
         view.setNeedsLayout()
         view.layoutIfNeeded()
@@ -349,7 +395,6 @@ public final class ImageEditorViewController: UIViewController {
             !($0 is DoodleDrawView || $0 is MosaicMaskView) && !$0.isHidden
         }
         guard hasOverlays else { return }
-        // Temporarily hide drawing layers so they aren't double-applied.
         let doodleHidden = canvas.doodleView.isHidden
         let mosaicHidden = canvas.mosaicMaskView.isHidden
         canvas.doodleView.isHidden = true
@@ -399,8 +444,8 @@ public final class ImageEditorViewController: UIViewController {
         }
         sheet.addAction(UIAlertAction(title: "取消", style: .cancel))
         if let pop = sheet.popoverPresentationController {
-            pop.sourceView = bottomBar
-            pop.sourceRect = bottomBar.bounds
+            pop.sourceView = categoryBar
+            pop.sourceRect = categoryBar.bounds
         }
         present(sheet, animated: true)
     }
@@ -420,6 +465,7 @@ public final class ImageEditorViewController: UIViewController {
             canvas.clearTransientOverlays()
             canvas.setImage(image)
         }
+        setSecondaryHeight(selectedTool == .doodle || selectedTool == .text ? 52 : 0)
     }
 
     @objc private func redoTapped() {
@@ -428,6 +474,7 @@ public final class ImageEditorViewController: UIViewController {
             canvas.clearTransientOverlays()
             canvas.setImage(image)
         }
+        setSecondaryHeight(selectedTool == .doodle || selectedTool == .text ? 52 : 0)
     }
 
     @objc private func cancelTapped() {
@@ -453,7 +500,6 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     @objc private func doneTapped() {
-        // 完成时丢弃未应用的混合 / 液化预览
         dismissTransientPanels(except: nil)
         applyTransientDrawingIfNeeded()
         flattenTransformableOverlays()
@@ -489,6 +535,15 @@ public final class ImageEditorViewController: UIViewController {
     }
 }
 
+extension ImageEditorViewController: ToolCategoryBarDelegate {
+    func toolCategoryBar(_ bar: ToolCategoryBar, didSelect tool: EditorTool) {
+        if selectedTool == .doodle || selectedTool == .mosaic {
+            applyTransientDrawingIfNeeded()
+        }
+        selectTool(tool)
+    }
+}
+
 extension ImageEditorViewController: CropToolViewControllerDelegate {
     func cropTool(_ controller: CropToolViewController, didFinish image: UIImage) {
         controller.dismiss(animated: true) { [weak self] in
@@ -515,20 +570,19 @@ extension ImageEditorViewController: BlendToolPanelDelegate {
         session.commit(image)
         canvas.setBlendPreview(effect: nil, intensity: 0)
         canvas.setImage(session.currentImage)
-        bottomBar.isHidden = false
+        setSecondaryHeight(0)
         selectTool(availableTools.first { $0 != .blend })
     }
 
     func blendToolPanelDidCancel(_ panel: BlendToolPanel) {
         canvas.setBlendPreview(effect: nil, intensity: 0)
-        bottomBar.isHidden = false
+        setSecondaryHeight(0)
         selectTool(availableTools.first { $0 != .blend })
     }
 }
 
 extension ImageEditorViewController: LiquifyToolPanelDelegate {
     func liquifyToolPanel(_ panel: LiquifyToolPanel, didUpdatePreview image: UIImage?) {
-        // 液化预览用全不透明覆盖层
         canvas.setBlendPreview(effect: image, intensity: image == nil ? 0 : 1)
     }
 
@@ -537,14 +591,14 @@ extension ImageEditorViewController: LiquifyToolPanelDelegate {
         canvas.setBlendPreview(effect: nil, intensity: 0)
         canvas.setImage(session.currentImage)
         liquifyBrushView.setActive(false)
-        bottomBar.isHidden = false
+        setSecondaryHeight(0)
         selectTool(availableTools.first { $0 != .liquify })
     }
 
     func liquifyToolPanelDidCancel(_ panel: LiquifyToolPanel) {
         canvas.setBlendPreview(effect: nil, intensity: 0)
         liquifyBrushView.setActive(false)
-        bottomBar.isHidden = false
+        setSecondaryHeight(0)
         selectTool(availableTools.first { $0 != .liquify })
     }
 
@@ -562,7 +616,6 @@ extension ImageEditorViewController: LiquifyToolPanelDelegate {
 
 extension ImageEditorViewController: LiquifyBrushViewDelegate {
     func liquifyBrushViewRequestImageFrame(_ view: LiquifyBrushView) -> CGRect {
-        // 把 canvas 上的图片显示框转换到笔刷层坐标，避免错位
         canvas.convert(canvas.imageFrame, to: view)
     }
 
