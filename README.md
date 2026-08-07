@@ -4,8 +4,8 @@
 
 ## Modules
 
-- `YKImageEditorCore`：几何变换、马赛克、混合模式叠色、导出、会话状态
-- `YKImageEditorUI`：UIKit 编辑器界面（含混合预设实时预览）
+- `YKImageEditorCore`：几何变换、马赛克、混合模式叠色、液化塑形、导出、会话状态
+- `YKImageEditorUI`：UIKit 编辑器界面（含混合预设、液化推移）
 
 ## Requirements
 

@@ -29,6 +29,9 @@ public struct EditorFeature: OptionSet, Sendable, Hashable {
     /// 混合：以色块/渐变/光效图层按混合模式叠色调色（正片叠底、滤色、柔光等）。
     public static let blend = EditorFeature(rawValue: 1 << 5)
 
+    /// 液化：推移塑形（推脸、微调轮廓）。
+    public static let liquify = EditorFeature(rawValue: 1 << 6)
+
     /// 全部功能（默认）。
-    public static let all: EditorFeature = [.crop, .doodle, .text, .mosaic, .sticker, .blend]
+    public static let all: EditorFeature = [.crop, .doodle, .text, .mosaic, .sticker, .blend, .liquify]
 }

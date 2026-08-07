@@ -119,6 +119,105 @@ final class YKImageEditorCoreTests: XCTestCase {
         XCTAssertFalse(EditorConfig.excluding([.blend]).isEnabled(.blend))
     }
 
+    func testLiquifyPushChangesImage() {
+        let base = makeGradientImage(width: 64, height: 64)
+        let deformer = LiquifyDeformer(columns: 16, rows: 16)
+        deformer.apply(
+            mode: .push,
+            at: CGPoint(x: 0.5, y: 0.5),
+            delta: CGPoint(x: 0.1, y: 0),
+            radius: 0.25,
+            strength: 1,
+            aspectRatio: 1
+        )
+        XCTAssertTrue(deformer.hasDeformation)
+        let result = LiquifyProcessor.render(image: base, deformer: deformer)
+        XCTAssertEqual(result.size, base.size)
+        XCTAssertNotEqual(
+            pixelColor(of: result, at: CGPoint(x: 32, y: 32)),
+            pixelColor(of: base, at: CGPoint(x: 32, y: 32))
+        )
+    }
+
+    func testLiquifyTouchTopAffectsTopNotBottom() {
+        // 上红下蓝
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let split = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64), format: format).image { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 32))
+            UIColor.blue.setFill()
+            ctx.fill(CGRect(x: 0, y: 32, width: 64, height: 32))
+        }
+        let deformer = LiquifyDeformer(columns: 32, rows: 32)
+        // 在顶部横向推移
+        deformer.apply(
+            mode: .push,
+            at: CGPoint(x: 0.5, y: 0.2),
+            delta: CGPoint(x: 0.08, y: 0),
+            radius: 0.2,
+            strength: 1,
+            aspectRatio: 1
+        )
+        let result = LiquifyProcessor.render(image: split, deformer: deformer)
+        let top = rgb(pixelColor(of: result, at: CGPoint(x: 32, y: 8)))
+        let bottom = rgb(pixelColor(of: result, at: CGPoint(x: 32, y: 56)))
+        // 不得整图颠倒：顶仍偏红、底仍偏蓝
+        XCTAssertGreaterThan(bottom.b, 0.6, "bottom should stay blue, got \(bottom)")
+        XCTAssertGreaterThan(top.r, 0.3, "top should stay red, got \(top)")
+        XCTAssertGreaterThan(top.r, top.b)
+        XCTAssertGreaterThan(bottom.b, bottom.r)
+    }
+
+    func testLiquifyDoesNotFlipWholeImage() {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let split = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64), format: format).image { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 32))
+            UIColor.blue.setFill()
+            ctx.fill(CGRect(x: 0, y: 32, width: 64, height: 32))
+        }
+        // 极弱推移：几乎不动像素，但会走完整渲染路径
+        let deformer = LiquifyDeformer(columns: 8, rows: 8)
+        deformer.apply(
+            mode: .push,
+            at: CGPoint(x: 0.5, y: 0.5),
+            delta: CGPoint(x: 0.01, y: 0),
+            radius: 0.05,
+            strength: 0.05,
+            aspectRatio: 1
+        )
+        let result = LiquifyProcessor.render(image: split, deformer: deformer)
+        let top = rgb(pixelColor(of: result, at: CGPoint(x: 32, y: 4)))
+        let bottom = rgb(pixelColor(of: result, at: CGPoint(x: 32, y: 60)))
+        XCTAssertGreaterThan(top.r, 0.8, "identity-ish render flipped? top=\(top)")
+        XCTAssertGreaterThan(bottom.b, 0.8, "identity-ish render flipped? bottom=\(bottom)")
+    }
+
+    func testLiquifyPushMovesContent() {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let split = UIGraphicsImageRenderer(size: CGSize(width: 48, height: 48), format: format).image { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 24, height: 48))
+            UIColor.blue.setFill()
+            ctx.fill(CGRect(x: 24, y: 0, width: 24, height: 48))
+        }
+        let deformer = LiquifyDeformer(columns: 24, rows: 24)
+        deformer.apply(
+            mode: .push,
+            at: CGPoint(x: 0.5, y: 0.5),
+            delta: CGPoint(x: 0.08, y: 0),
+            radius: 0.3,
+            strength: 1,
+            aspectRatio: 1
+        )
+        let result = LiquifyProcessor.render(image: split, deformer: deformer)
+        XCTAssertTrue(deformer.hasDeformation)
+        XCTAssertEqual(result.size, split.size)
+    }
+
     private func makeImage(width: Int, height: Int, color: UIColor) -> UIImage {
         let size = CGSize(width: width, height: height)
         let format = UIGraphicsImageRendererFormat.default()
@@ -144,31 +243,34 @@ final class YKImageEditorCoreTests: XCTestCase {
         }
     }
 
+    /// 取样为强制 RGBA 的 1×1 缓冲，避免 BGRA / 行序误读。
     private func pixelColor(of image: UIImage, at point: CGPoint) -> UIColor {
-        guard let cgImage = image.cgImage else { return .clear }
-        let width = cgImage.width
-        let height = cgImage.height
-        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        let scale = image.scale
+        let px = min(max(Int((point.x * scale).rounded()), 0), Int(image.size.width * scale) - 1)
+        let py = min(max(Int((point.y * scale).rounded()), 0), Int(image.size.height * scale) - 1)
+        var pixel: [UInt8] = [0, 0, 0, 0]
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
         guard let context = CGContext(
-            data: &rgba,
-            width: width,
-            height: height,
+            data: &pixel,
+            width: 1,
+            height: 1,
             bitsPerComponent: 8,
-            bytesPerRow: width * 4,
+            bytesPerRow: 4,
             space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            bitmapInfo: bitmapInfo
         ) else { return .clear }
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        let x = min(max(Int(point.x), 0), width - 1)
-        let y = min(max(Int(point.y), 0), height - 1)
-        // CGContext 原点在左下，UIImage 点在左上，这里按图像像素行从上到下采样时翻转 Y。
-        let row = height - 1 - y
-        let index = (row * width + x) * 4
+
+        context.translateBy(x: 0, y: 1)
+        context.scaleBy(x: 1, y: -1)
+        UIGraphicsPushContext(context)
+        image.draw(at: CGPoint(x: -CGFloat(px), y: -CGFloat(py)))
+        UIGraphicsPopContext()
+
         return UIColor(
-            red: CGFloat(rgba[index]) / 255,
-            green: CGFloat(rgba[index + 1]) / 255,
-            blue: CGFloat(rgba[index + 2]) / 255,
-            alpha: CGFloat(rgba[index + 3]) / 255
+            red: CGFloat(pixel[0]) / 255,
+            green: CGFloat(pixel[1]) / 255,
+            blue: CGFloat(pixel[2]) / 255,
+            alpha: CGFloat(pixel[3]) / 255
         )
     }
 

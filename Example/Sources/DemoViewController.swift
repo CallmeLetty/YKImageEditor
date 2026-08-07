@@ -30,9 +30,10 @@ final class DemoViewController: UIViewController, UIImagePickerControllerDelegat
         let editAll = makeButton("全部", action: #selector(editAll))
         let editOriginal = makeButton("裁剪/涂鸦/文字/马赛克/贴纸", action: #selector(editOriginalFeatures))
         let editBlend = makeButton("混合", action: #selector(editBlendOnly))
+        let editLiquify = makeButton("液化（推移）", action: #selector(editLiquifyOnly))
 
         let stack = UIStackView(arrangedSubviews: [
-            preview, resultLabel, editAll, editOriginal, editBlend
+            preview, resultLabel, editAll, editOriginal, editBlend, editLiquify
         ])
         stack.axis = .vertical
         stack.spacing = 12
@@ -68,14 +69,19 @@ final class DemoViewController: UIViewController, UIImagePickerControllerDelegat
         openEditor(config: .all)
     }
 
-    /// 原本能力：裁剪 / 涂鸦 / 文字 / 马赛克 / 贴纸（不含混合）。
+    /// 原本能力：裁剪 / 涂鸦 / 文字 / 马赛克 / 贴纸（不含混合、液化）。
     @objc private func editOriginalFeatures() {
-        openEditor(config: .excluding([.blend]))
+        openEditor(config: .excluding([.blend, .liquify]))
     }
 
     /// 仅混合调色。
     @objc private func editBlendOnly() {
         openEditor(config: .including([.blend]))
+    }
+
+    /// 仅液化塑形。
+    @objc private func editLiquifyOnly() {
+        openEditor(config: .including([.liquify]))
     }
 
     private func openEditor(config: EditorConfig) {

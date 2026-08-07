@@ -17,6 +17,8 @@ public final class ImageEditorViewController: UIViewController {
     private let topBar = UIView()
     private let bottomBar = UIView()
     private let blendPanel = BlendToolPanel()
+    private let liquifyPanel = LiquifyToolPanel()
+    private let liquifyBrushView = LiquifyBrushView()
     private let toolStack = UIStackView()
     private let colorStack = UIStackView()
     private var selectedTool: EditorTool?
@@ -76,15 +78,21 @@ public final class ImageEditorViewController: UIViewController {
 
     private func buildLayout() {
         view.addSubview(canvas)
+        view.addSubview(liquifyBrushView)
         view.addSubview(topBar)
         view.addSubview(bottomBar)
         view.addSubview(blendPanel)
+        view.addSubview(liquifyPanel)
 
         canvas.translatesAutoresizingMaskIntoConstraints = false
+        liquifyBrushView.translatesAutoresizingMaskIntoConstraints = false
         topBar.translatesAutoresizingMaskIntoConstraints = false
         bottomBar.translatesAutoresizingMaskIntoConstraints = false
         blendPanel.translatesAutoresizingMaskIntoConstraints = false
+        liquifyPanel.translatesAutoresizingMaskIntoConstraints = false
         blendPanel.delegate = self
+        liquifyPanel.delegate = self
+        liquifyBrushView.delegate = self
 
         buildTopBar()
         buildBottomBar()
@@ -105,12 +113,23 @@ public final class ImageEditorViewController: UIViewController {
             blendPanel.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             blendPanel.heightAnchor.constraint(equalToConstant: 150),
 
+            liquifyPanel.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            liquifyPanel.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            liquifyPanel.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            liquifyPanel.heightAnchor.constraint(equalToConstant: 150),
+
             canvas.topAnchor.constraint(equalTo: topBar.bottomAnchor),
             canvas.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             canvas.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            canvas.bottomAnchor.constraint(equalTo: bottomBar.topAnchor)
+            canvas.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
+
+            liquifyBrushView.topAnchor.constraint(equalTo: canvas.topAnchor),
+            liquifyBrushView.leadingAnchor.constraint(equalTo: canvas.leadingAnchor),
+            liquifyBrushView.trailingAnchor.constraint(equalTo: canvas.trailingAnchor),
+            liquifyBrushView.bottomAnchor.constraint(equalTo: canvas.bottomAnchor)
         ])
     }
+
 
     private func buildTopBar() {
         let cancel = UIButton(type: .system)
@@ -207,10 +226,7 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     private func selectTool(_ tool: EditorTool?) {
-        if selectedTool == .blend, tool != .blend, !blendPanel.isHidden {
-            blendPanel.dismissPanel()
-            bottomBar.isHidden = false
-        }
+        dismissTransientPanels(except: tool)
 
         selectedTool = tool
         canvas.doodleView.isHidden = tool != .doodle
@@ -218,6 +234,7 @@ public final class ImageEditorViewController: UIViewController {
         colorStack.isHidden = !(tool == .doodle || tool == .text)
         canvas.doodleView.isUserInteractionEnabled = tool == .doodle
         canvas.mosaicMaskView.isUserInteractionEnabled = tool == .mosaic
+        liquifyBrushView.setActive(tool == .liquify)
 
         for case let button as UIButton in toolStack.arrangedSubviews {
             let isSelected = button.tag == tool?.rawValue
@@ -232,6 +249,8 @@ public final class ImageEditorViewController: UIViewController {
             presentStickers()
         } else if tool == .blend {
             presentBlend()
+        } else if tool == .liquify {
+            presentLiquify()
         }
     }
 
@@ -241,11 +260,21 @@ public final class ImageEditorViewController: UIViewController {
         if selectedTool == .doodle || selectedTool == .mosaic {
             applyTransientDrawingIfNeeded()
         }
-        if selectedTool == .blend, tool != .blend {
+        selectTool(tool)
+    }
+
+    private func dismissTransientPanels(except tool: EditorTool?) {
+        if tool != .blend, !blendPanel.isHidden {
             blendPanel.dismissPanel()
             bottomBar.isHidden = false
+            canvas.setBlendPreview(effect: nil, intensity: 0)
         }
-        selectTool(tool)
+        if tool != .liquify, !liquifyPanel.isHidden {
+            liquifyPanel.dismissPanel()
+            bottomBar.isHidden = false
+            liquifyBrushView.setActive(false)
+            canvas.setPreviewImage(nil)
+        }
     }
 
     private func presentBlend() {
@@ -253,6 +282,16 @@ public final class ImageEditorViewController: UIViewController {
         flattenTransformableOverlays()
         bottomBar.isHidden = true
         blendPanel.present(with: session.currentImage)
+    }
+
+    private func presentLiquify() {
+        applyTransientDrawingIfNeeded()
+        flattenTransformableOverlays()
+        bottomBar.isHidden = true
+        liquifyBrushView.setActive(true)
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        liquifyPanel.present(with: session.currentImage)
     }
 
     @objc private func colorTapped(_ sender: UIButton) {
@@ -375,10 +414,7 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     @objc private func undoTapped() {
-        if !blendPanel.isHidden {
-            blendPanel.dismissPanel()
-            bottomBar.isHidden = false
-        }
+        dismissTransientPanels(except: nil)
         applyTransientDrawingIfNeeded()
         if let image = session.undo() {
             canvas.clearTransientOverlays()
@@ -387,10 +423,7 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     @objc private func redoTapped() {
-        if !blendPanel.isHidden {
-            blendPanel.dismissPanel()
-            bottomBar.isHidden = false
-        }
+        dismissTransientPanels(except: nil)
         if let image = session.redo() {
             canvas.clearTransientOverlays()
             canvas.setImage(image)
@@ -398,10 +431,7 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     @objc private func cancelTapped() {
-        if !blendPanel.isHidden {
-            blendPanel.dismissPanel()
-            bottomBar.isHidden = false
-        }
+        dismissTransientPanels(except: nil)
         applyTransientDrawingIfNeeded()
         let hasOverlays = canvas.overlayContainer.subviews.contains {
             !($0 is DoodleDrawView || $0 is MosaicMaskView)
@@ -423,11 +453,8 @@ public final class ImageEditorViewController: UIViewController {
     }
 
     @objc private func doneTapped() {
-        if !blendPanel.isHidden {
-            // 完成时丢弃未应用的混合预览
-            blendPanel.dismissPanel()
-            bottomBar.isHidden = false
-        }
+        // 完成时丢弃未应用的混合 / 液化预览
+        dismissTransientPanels(except: nil)
         applyTransientDrawingIfNeeded()
         flattenTransformableOverlays()
         let exported = session.makeExportImage(options: config.exportOptions)
@@ -496,5 +523,70 @@ extension ImageEditorViewController: BlendToolPanelDelegate {
         canvas.setBlendPreview(effect: nil, intensity: 0)
         bottomBar.isHidden = false
         selectTool(availableTools.first { $0 != .blend })
+    }
+}
+
+extension ImageEditorViewController: LiquifyToolPanelDelegate {
+    func liquifyToolPanel(_ panel: LiquifyToolPanel, didUpdatePreview image: UIImage?) {
+        // 液化预览用全不透明覆盖层
+        canvas.setBlendPreview(effect: image, intensity: image == nil ? 0 : 1)
+    }
+
+    func liquifyToolPanel(_ panel: LiquifyToolPanel, didApply image: UIImage) {
+        session.commit(image)
+        canvas.setBlendPreview(effect: nil, intensity: 0)
+        canvas.setImage(session.currentImage)
+        liquifyBrushView.setActive(false)
+        bottomBar.isHidden = false
+        selectTool(availableTools.first { $0 != .liquify })
+    }
+
+    func liquifyToolPanelDidCancel(_ panel: LiquifyToolPanel) {
+        canvas.setBlendPreview(effect: nil, intensity: 0)
+        liquifyBrushView.setActive(false)
+        bottomBar.isHidden = false
+        selectTool(availableTools.first { $0 != .liquify })
+    }
+
+    func liquifyToolPanel(
+        _ panel: LiquifyToolPanel,
+        didChangeMode mode: LiquifyMode,
+        radiusRatio: CGFloat,
+        strength: CGFloat
+    ) {
+        liquifyBrushView.mode = mode
+        liquifyBrushView.brushRadiusRatio = radiusRatio
+        liquifyBrushView.strength = strength
+    }
+}
+
+extension ImageEditorViewController: LiquifyBrushViewDelegate {
+    func liquifyBrushViewRequestImageFrame(_ view: LiquifyBrushView) -> CGRect {
+        // 把 canvas 上的图片显示框转换到笔刷层坐标，避免错位
+        canvas.convert(canvas.imageFrame, to: view)
+    }
+
+    func liquifyBrushView(
+        _ view: LiquifyBrushView,
+        didStroke mode: LiquifyMode,
+        at point: CGPoint,
+        delta: CGPoint,
+        radius: CGFloat,
+        strength: CGFloat
+    ) {
+        let frame = canvas.convert(canvas.imageFrame, to: view)
+        let aspect = frame.height > 0 ? frame.width / frame.height : 1
+        liquifyPanel.applyStroke(
+            mode: mode,
+            at: point,
+            delta: delta,
+            radius: radius,
+            strength: strength,
+            aspectRatio: aspect
+        )
+    }
+
+    func liquifyBrushViewDidEndStroke(_ view: LiquifyBrushView) {
+        liquifyPanel.endStroke()
     }
 }

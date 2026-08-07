@@ -6,6 +6,7 @@ enum EditorTool: Int, CaseIterable {
     case mosaic
     case sticker
     case blend
+    case liquify
     case crop
 
     var title: String {
@@ -15,6 +16,7 @@ enum EditorTool: Int, CaseIterable {
         case .mosaic: return "马赛克"
         case .sticker: return "贴纸"
         case .blend: return "混合"
+        case .liquify: return "液化"
         case .crop: return "裁剪"
         }
     }
@@ -26,6 +28,7 @@ enum EditorTool: Int, CaseIterable {
         case .mosaic: return .mosaic
         case .sticker: return .sticker
         case .blend: return .blend
+        case .liquify: return .liquify
         case .crop: return .crop
         }
     }
