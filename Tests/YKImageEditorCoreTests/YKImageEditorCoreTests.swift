@@ -42,6 +42,36 @@ final class YKImageEditorCoreTests: XCTestCase {
         XCTAssertEqual(rotated.size.height, 120, accuracy: 1)
     }
 
+    func testHorizontalFlipSwapsLeftAndRight() {
+        let image = makeSplitImage(
+            size: CGSize(width: 64, height: 64),
+            firstRect: CGRect(x: 0, y: 0, width: 32, height: 64),
+            firstColor: .red,
+            secondColor: .blue
+        )
+        let flipped = ImageGeometry.flip(image, horizontal: true, vertical: false)
+        let left = rgb(pixelColor(of: flipped, at: CGPoint(x: 8, y: 32)))
+        let right = rgb(pixelColor(of: flipped, at: CGPoint(x: 56, y: 32)))
+
+        XCTAssertGreaterThan(left.b, 0.8, "left side should become blue, got \(left)")
+        XCTAssertGreaterThan(right.r, 0.8, "right side should become red, got \(right)")
+    }
+
+    func testVerticalFlipSwapsTopAndBottom() {
+        let image = makeSplitImage(
+            size: CGSize(width: 64, height: 64),
+            firstRect: CGRect(x: 0, y: 0, width: 64, height: 32),
+            firstColor: .red,
+            secondColor: .blue
+        )
+        let flipped = ImageGeometry.flip(image, horizontal: false, vertical: true)
+        let top = rgb(pixelColor(of: flipped, at: CGPoint(x: 32, y: 8)))
+        let bottom = rgb(pixelColor(of: flipped, at: CGPoint(x: 32, y: 56)))
+
+        XCTAssertGreaterThan(top.b, 0.8, "top side should become blue, got \(top)")
+        XCTAssertGreaterThan(bottom.r, 0.8, "bottom side should become red, got \(bottom)")
+    }
+
     func testSessionUndoRedo() {
         let image = makeImage(width: 80, height: 80, color: .orange)
         let session = EditorSession(image: image, maxDimension: 4096)
@@ -263,6 +293,23 @@ final class YKImageEditorCoreTests: XCTestCase {
                 UIColor(red: t, green: 1 - t, blue: 0.5, alpha: 1).setFill()
                 context.fill(CGRect(x: x, y: 0, width: 1, height: height))
             }
+        }
+    }
+
+    private func makeSplitImage(
+        size: CGSize,
+        firstRect: CGRect,
+        firstColor: UIColor,
+        secondColor: UIColor
+    ) -> UIImage {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { context in
+            secondColor.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            firstColor.setFill()
+            context.fill(firstRect)
         }
     }
 

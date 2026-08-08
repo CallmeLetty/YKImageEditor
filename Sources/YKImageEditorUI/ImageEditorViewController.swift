@@ -60,7 +60,7 @@ public final class ImageEditorViewController: UIViewController {
         configureTools()
         buildLayout()
         canvas.setImage(session.currentImage)
-        selectTool(availableTools.first)
+        selectTool(nil)
     }
 
     private func configureTools() {
@@ -550,13 +550,13 @@ extension ImageEditorViewController: CropToolViewControllerDelegate {
             guard let self else { return }
             self.session.commit(image)
             self.canvas.setImage(self.session.currentImage)
-            self.selectTool(self.availableTools.first { $0 != .crop })
+            self.selectTool(nil)
         }
     }
 
     func cropToolDidCancel(_ controller: CropToolViewController) {
         controller.dismiss(animated: true) { [weak self] in
-            self?.selectTool(self?.availableTools.first { $0 != .crop })
+            self?.selectTool(nil)
         }
     }
 }

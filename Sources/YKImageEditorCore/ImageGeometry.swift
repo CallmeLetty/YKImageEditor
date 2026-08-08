@@ -75,7 +75,7 @@ public enum ImageGeometry {
 
     /// 水平或垂直翻转。
     public static func flip(_ image: UIImage, horizontal: Bool, vertical: Bool) -> UIImage {
-        guard horizontal || vertical, let cgImage = image.cgImage else { return image }
+        guard horizontal || vertical else { return image }
         let size = image.size
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = image.scale
@@ -91,7 +91,7 @@ public enum ImageGeometry {
                 x: horizontal ? -1 : 1,
                 y: vertical ? -1 : 1
             )
-            ctx.draw(cgImage, in: CGRect(origin: .zero, size: size))
+            image.draw(in: CGRect(origin: .zero, size: size))
         }
     }
 

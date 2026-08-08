@@ -57,8 +57,7 @@ final class CropToolViewController: UIViewController {
 
             bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            bottomBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            bottomBar.heightAnchor.constraint(equalToConstant: 96),
+            bottomBar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             imageView.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 8),
             imageView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
@@ -87,14 +86,10 @@ final class CropToolViewController: UIViewController {
 
     private func makeTopBar() -> UIView {
         let bar = UIView()
-        let cancel = UIButton(type: .system)
-        cancel.setTitle("取消", for: .normal)
-        cancel.setTitleColor(.white, for: .normal)
+        let cancel = makeBarButton(title: "取消", systemImageName: "xmark")
         cancel.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
 
-        let done = UIButton(type: .system)
-        done.setTitle("完成", for: .normal)
-        done.setTitleColor(.systemGreen, for: .normal)
+        let done = makeBarButton(title: "完成", systemImageName: "checkmark", tintColor: EditorTheme.accent)
         done.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
 
         bar.addSubview(cancel)
@@ -130,10 +125,7 @@ final class CropToolViewController: UIViewController {
             ("原图", sourceImage.size.width / max(sourceImage.size.height, 1))
         ]
         for (title, ratio) in ratios {
-            let button = UIButton(type: .system)
-            button.setTitle(title, for: .normal)
-            button.setTitleColor(.white, for: .normal)
-            button.titleLabel?.font = .systemFont(ofSize: 13)
+            let button = makeRatioButton(title: title, systemImageName: ratioIconName(for: title))
             button.tag = ratios.firstIndex(where: { $0.0 == title }) ?? 0
             button.addAction(UIAction { [weak self] _ in
                 self?.selectedRatio = ratio
@@ -145,9 +137,10 @@ final class CropToolViewController: UIViewController {
         let actionStack = UIStackView()
         actionStack.axis = .horizontal
         actionStack.distribution = .fillEqually
-        let rotate = makeActionButton("旋转") { [weak self] in self?.rotate() }
-        let flipH = makeActionButton("左右翻转") { [weak self] in self?.flip(horizontal: true, vertical: false) }
-        let flipV = makeActionButton("上下翻转") { [weak self] in self?.flip(horizontal: false, vertical: true) }
+        actionStack.spacing = 8
+        let rotate = makeActionButton("旋转", systemImageName: "rotate.right") { [weak self] in self?.rotate() }
+        let flipH = makeActionButton("左右翻转", systemImageName: "arrow.left.and.right") { [weak self] in self?.flip(horizontal: true, vertical: false) }
+        let flipV = makeActionButton("上下翻转", systemImageName: "arrow.up.and.down") { [weak self] in self?.flip(horizontal: false, vertical: true) }
         [rotate, flipH, flipV].forEach { actionStack.addArrangedSubview($0) }
 
         stack.addArrangedSubview(ratioStack)
@@ -157,17 +150,86 @@ final class CropToolViewController: UIViewController {
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 12),
             stack.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -12),
-            stack.centerYAnchor.constraint(equalTo: bar.centerYAnchor)
+            stack.topAnchor.constraint(equalTo: bar.topAnchor, constant: 8),
+            stack.bottomAnchor.constraint(equalTo: bar.safeAreaLayoutGuide.bottomAnchor, constant: -12),
+            ratioStack.heightAnchor.constraint(equalToConstant: 50),
+            actionStack.heightAnchor.constraint(equalToConstant: 60)
         ])
         return bar
     }
 
-    private func makeActionButton(_ title: String, action: @escaping () -> Void) -> UIButton {
+    private func makeBarButton(
+        title: String,
+        systemImageName: String,
+        tintColor: UIColor = .white
+    ) -> UIButton {
         let button = UIButton(type: .system)
-        button.setTitle(title, for: .normal)
-        button.setTitleColor(.white, for: .normal)
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(systemName: systemImageName)
+        configuration.imagePadding = 6
+        configuration.baseForegroundColor = tintColor
+        configuration.title = title
+        button.configuration = configuration
+        button.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+        return button
+    }
+
+    private func makeRatioButton(title: String, systemImageName: String) -> UIButton {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(
+            systemName: systemImageName,
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)
+        )
+        configuration.imagePlacement = .top
+        configuration.imagePadding = 4
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 2, bottom: 2, trailing: 2)
+        configuration.baseForegroundColor = .white
+        configuration.titleAlignment = .center
+        configuration.title = title
+        button.configuration = configuration
+        button.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
+        button.titleLabel?.numberOfLines = 1
+        button.titleLabel?.adjustsFontSizeToFitWidth = true
+        button.titleLabel?.minimumScaleFactor = 0.8
+        return button
+    }
+
+    private func makeActionButton(
+        _ title: String,
+        systemImageName: String,
+        action: @escaping () -> Void
+    ) -> UIButton {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.filled()
+        configuration.image = UIImage(
+            systemName: systemImageName,
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
+        )
+        configuration.imagePlacement = .top
+        configuration.imagePadding = 5
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 4, bottom: 6, trailing: 4)
+        configuration.baseForegroundColor = .white
+        configuration.baseBackgroundColor = UIColor.white.withAlphaComponent(0.12)
+        configuration.cornerStyle = .medium
+        configuration.titleAlignment = .center
+        configuration.title = title
+        button.configuration = configuration
+        button.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold)
+        button.titleLabel?.numberOfLines = 1
+        button.titleLabel?.adjustsFontSizeToFitWidth = true
+        button.titleLabel?.minimumScaleFactor = 0.8
         button.addAction(UIAction { _ in action() }, for: .touchUpInside)
         return button
+    }
+
+    private func ratioIconName(for title: String) -> String {
+        switch title {
+        case "自由": return "crop"
+        case "原图": return "photo"
+        case "1:1": return "square"
+        default: return "rectangle"
+        }
     }
 
     private func rotate() {
@@ -210,6 +272,8 @@ final class CropRectView: UIView {
     private(set) var cropRect: CGRect = .zero
     private let dimLayer = CAShapeLayer()
     private let borderLayer = CAShapeLayer()
+    private let gridLayer = CAShapeLayer()
+    private let cornerLayer = CAShapeLayer()
     private var activeCorner: Corner?
     private var panStart = CGPoint.zero
     private var startRect = CGRect.zero
@@ -224,12 +288,22 @@ final class CropRectView: UIView {
         backgroundColor = .clear
         isUserInteractionEnabled = true
         dimLayer.fillRule = .evenOdd
-        dimLayer.fillColor = UIColor.black.withAlphaComponent(0.55).cgColor
-        borderLayer.strokeColor = UIColor.white.cgColor
+        dimLayer.fillColor = UIColor.black.withAlphaComponent(0.68).cgColor
+        borderLayer.strokeColor = EditorTheme.accent.cgColor
         borderLayer.fillColor = UIColor.clear.cgColor
-        borderLayer.lineWidth = 1
+        borderLayer.lineWidth = 2
+        gridLayer.strokeColor = UIColor.white.withAlphaComponent(0.65).cgColor
+        gridLayer.fillColor = UIColor.clear.cgColor
+        gridLayer.lineWidth = 1
+        cornerLayer.strokeColor = UIColor.white.cgColor
+        cornerLayer.fillColor = UIColor.clear.cgColor
+        cornerLayer.lineWidth = 5
+        cornerLayer.lineCap = .round
+        cornerLayer.lineJoin = .round
         layer.addSublayer(dimLayer)
+        layer.addSublayer(gridLayer)
         layer.addSublayer(borderLayer)
+        layer.addSublayer(cornerLayer)
 
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         addGestureRecognizer(pan)
@@ -267,6 +341,47 @@ final class CropRectView: UIView {
         path.append(UIBezierPath(rect: cropRect))
         dimLayer.path = path.cgPath
         borderLayer.path = UIBezierPath(rect: cropRect).cgPath
+        gridLayer.path = gridPath(in: cropRect).cgPath
+        cornerLayer.path = cornerPath(in: cropRect).cgPath
+    }
+
+    private func gridPath(in rect: CGRect) -> UIBezierPath {
+        let path = UIBezierPath()
+        guard rect.width > 0, rect.height > 0 else { return path }
+        for step in 1...2 {
+            let x = rect.minX + rect.width * CGFloat(step) / 3
+            path.move(to: CGPoint(x: x, y: rect.minY))
+            path.addLine(to: CGPoint(x: x, y: rect.maxY))
+
+            let y = rect.minY + rect.height * CGFloat(step) / 3
+            path.move(to: CGPoint(x: rect.minX, y: y))
+            path.addLine(to: CGPoint(x: rect.maxX, y: y))
+        }
+        return path
+    }
+
+    private func cornerPath(in rect: CGRect) -> UIBezierPath {
+        let path = UIBezierPath()
+        guard rect.width > 0, rect.height > 0 else { return path }
+        let length = min(30, rect.width / 4, rect.height / 4)
+
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + length))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX + length, y: rect.minY))
+
+        path.move(to: CGPoint(x: rect.maxX - length, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + length))
+
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY - length))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + length, y: rect.maxY))
+
+        path.move(to: CGPoint(x: rect.maxX - length, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - length))
+
+        return path
     }
 
     override func layoutSubviews() {
