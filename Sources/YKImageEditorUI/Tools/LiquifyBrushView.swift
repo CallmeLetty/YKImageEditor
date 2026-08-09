@@ -1,9 +1,11 @@
 import UIKit
 import YKImageEditorCore
 
+@MainActor
 protocol LiquifyBrushViewDelegate: AnyObject {
     /// 返回图片在笔刷视图坐标系中的显示区域（需与画面一致）。
     func liquifyBrushViewRequestImageFrame(_ view: LiquifyBrushView) -> CGRect
+    func liquifyBrushViewWillBeginStroke(_ view: LiquifyBrushView)
     func liquifyBrushView(
         _ view: LiquifyBrushView,
         didStroke mode: LiquifyMode,
@@ -75,6 +77,7 @@ final class LiquifyBrushView: UIView {
 
         switch gesture.state {
         case .began:
+            delegate?.liquifyBrushViewWillBeginStroke(self)
             lastPoint = location
             updateBrush(at: location, imageFrame: imageFrame)
             emit(at: location, previous: location, imageFrame: imageFrame)

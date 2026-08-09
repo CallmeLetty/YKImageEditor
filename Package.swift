@@ -24,6 +24,11 @@ let package = Package(
             name: "YKImageEditorCoreTests",
             dependencies: ["YKImageEditorCore"],
             path: "Tests/YKImageEditorCoreTests"
+        ),
+        .testTarget(
+            name: "YKImageEditorUITests",
+            dependencies: ["YKImageEditorUI"],
+            path: "Tests/YKImageEditorUITests"
         )
     ]
 )

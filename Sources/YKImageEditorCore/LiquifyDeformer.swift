@@ -40,12 +40,27 @@ public final class LiquifyDeformer {
         }
     }
 
+    /// 用另一个相同网格尺寸的形变场恢复当前状态。
+    public func restore(from snapshot: LiquifyDeformer) {
+        guard snapshot.columns == columns, snapshot.rows == rows else { return }
+        offsetX = snapshot.offsetX
+        offsetY = snapshot.offsetY
+    }
+
     /// 复制当前形变场（供后台渲染，避免与主线程笔刷写入竞态）。
     public func snapshot() -> LiquifyDeformer {
         let copy = LiquifyDeformer(columns: columns, rows: rows)
         copy.offsetX = offsetX
         copy.offsetY = offsetY
         return copy
+    }
+
+    /// 按行返回 GPU 预览使用的反向位移网格。
+    ///
+    /// 数组布局与 ``sourcePoint(forNormalized:)`` 一致：每个元素对应一个
+    /// `(x, y)` 控制点，先从左到右，再从上到下。
+    public func displacementVectors() -> [SIMD2<Float>] {
+        zip(offsetX, offsetY).map { SIMD2<Float>($0, $1) }
     }
 
     /// 应用一笔液化。

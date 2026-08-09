@@ -1,11 +1,13 @@
 import AVFoundation
 import UIKit
+import YKImageEditorCore
 
 /// 展示工作图，并承载涂鸦 / 文字 / 贴纸 / 马赛克遮罩等叠加层。
 final class EditorCanvasView: UIView {
     let imageView = UIImageView()
     /// 混合等工具的实时预览层；有值时盖住底图。
     let previewImageView = UIImageView()
+    let liquifyPreviewView = LiquifyMetalPreviewView()
     let overlayContainer = UIView()
     let doodleView = DoodleDrawView()
     let mosaicMaskView = MosaicMaskView()
@@ -28,6 +30,7 @@ final class EditorCanvasView: UIView {
 
         addSubview(imageView)
         addSubview(previewImageView)
+        addSubview(liquifyPreviewView)
         addSubview(overlayContainer)
         overlayContainer.addSubview(doodleView)
         overlayContainer.addSubview(mosaicMaskView)
@@ -63,9 +66,16 @@ final class EditorCanvasView: UIView {
         }
     }
 
-    /// 设置或清除普通预览图（兼容旧调用）。
-    func setPreviewImage(_ image: UIImage?) {
-        setBlendPreview(effect: image, intensity: image == nil ? 0 : 1)
+    func beginLiquifyPreview(image: UIImage, deformer: LiquifyDeformer) {
+        liquifyPreviewView.begin(image: image, deformer: deformer)
+    }
+
+    func updateLiquifyPreview(deformer: LiquifyDeformer) {
+        liquifyPreviewView.update(deformer: deformer)
+    }
+
+    func endLiquifyPreview() {
+        liquifyPreviewView.end()
     }
 
     var imageFrame: CGRect {
@@ -78,13 +88,32 @@ final class EditorCanvasView: UIView {
         imageView.frame = bounds
         previewImageView.frame = bounds
         let frame = imageFrame
+        liquifyPreviewView.frame = frame
+        let oldSize = overlayContainer.bounds.size
+        let newSize = frame.size
+        if oldSize.width > 0, oldSize.height > 0, oldSize != newSize {
+            let scaleX = newSize.width / oldSize.width
+            let scaleY = newSize.height / oldSize.height
+            let transformScale = min(scaleX, scaleY)
+            doodleView.rescaleContent(from: oldSize, to: newSize)
+            for case let overlay as TransformableOverlayView in overlayContainer.subviews {
+                overlay.center = CGPoint(
+                    x: overlay.center.x * scaleX,
+                    y: overlay.center.y * scaleY
+                )
+                overlay.transform = overlay.transform.scaledBy(
+                    x: transformScale,
+                    y: transformScale
+                )
+            }
+        }
         overlayContainer.frame = frame
         doodleView.frame = overlayContainer.bounds
         mosaicMaskView.frame = overlayContainer.bounds
     }
 
-    /// 将涂鸦与可变换叠加层栅格化并合成到当前图片上。
-    func flattenOverlays(onto image: UIImage) -> UIImage {
+    /// 将可编辑图层渲染到图片副本上，不修改或移除源图层。
+    func renderEditableLayers(onto image: UIImage) -> UIImage {
         let size = image.size
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = image.scale
@@ -96,8 +125,7 @@ final class EditorCanvasView: UIView {
             image.draw(in: CGRect(origin: .zero, size: size))
             guard overlayBounds.width > 0, overlayBounds.height > 0 else { return }
 
-            if !doodleView.isHidden, doodleView.hasContent,
-               let doodleImage = doodleView.snapshotImage() {
+            if doodleView.hasContent, let doodleImage = doodleView.snapshotImage() {
                 doodleImage.draw(in: CGRect(origin: .zero, size: size))
             }
 
@@ -131,7 +159,7 @@ final class EditorCanvasView: UIView {
         }
     }
 
-    func clearTransientOverlays() {
+    func clearAllEditableLayers() {
         doodleView.clear()
         mosaicMaskView.clear()
         for sub in overlayContainer.subviews where !(sub is DoodleDrawView || sub is MosaicMaskView) {

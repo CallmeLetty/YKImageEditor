@@ -48,7 +48,7 @@ public enum ImageGeometry {
     /// 以 90° 的倍数旋转图片（顺时针，`quarterTurns` 可为负）。
     public static func rotate90(_ image: UIImage, quarterTurns: Int) -> UIImage {
         let turns = ((quarterTurns % 4) + 4) % 4
-        guard turns != 0, let cgImage = image.cgImage else { return image }
+        guard turns != 0 else { return image }
 
         let radians = CGFloat(turns) * .pi / 2
         let bounds = CGRect(origin: .zero, size: image.size)
@@ -69,7 +69,7 @@ public enum ImageGeometry {
                 width: image.size.width,
                 height: image.size.height
             )
-            ctx.draw(cgImage, in: drawRect)
+            image.draw(in: drawRect)
         }
     }
 

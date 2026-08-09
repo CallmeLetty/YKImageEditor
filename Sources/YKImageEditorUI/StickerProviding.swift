@@ -21,3 +21,17 @@ public final class ClosureStickerProvider: StickerProviding {
         provider()
     }
 }
+
+enum StickerImageRendering {
+    static func resolvedImage(_ image: UIImage) -> UIImage {
+        if image.renderingMode == .alwaysOriginal {
+            return image
+        }
+
+        if image.isSymbolImage || image.renderingMode == .alwaysTemplate {
+            return image.withTintColor(EditorTheme.accent, renderingMode: .alwaysOriginal)
+        }
+
+        return image.withRenderingMode(.alwaysOriginal)
+    }
+}

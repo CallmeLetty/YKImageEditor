@@ -12,6 +12,5 @@ enum EditorTheme {
     static let chip = UIColor(white: 1, alpha: 0.1)
     static let chipSelected = UIColor(red: 0.25, green: 0.55, blue: 1.0, alpha: 0.85)
 
-    static let categoryHeight: CGFloat = 52
     static let topBarHeight: CGFloat = 48
 }

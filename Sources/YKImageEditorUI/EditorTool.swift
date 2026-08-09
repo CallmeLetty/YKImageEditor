@@ -1,7 +1,6 @@
-import UIKit
 import YKImageEditorCore
 
-enum EditorTool: Int, CaseIterable {
+enum EditorTool: Int, CaseIterable, Identifiable {
     case crop
     case liquify
     case blend
@@ -9,6 +8,8 @@ enum EditorTool: Int, CaseIterable {
     case text
     case doodle
     case mosaic
+
+    var id: Int { rawValue }
 
     var title: String {
         switch self {

@@ -1,17 +1,39 @@
 import UIKit
 
+final class DoodleStroke {
+    let id: UUID
+    var path: UIBezierPath
+    let color: UIColor
+    var lineWidth: CGFloat
+
+    init(
+        id: UUID = UUID(),
+        path: UIBezierPath,
+        color: UIColor,
+        lineWidth: CGFloat
+    ) {
+        self.id = id
+        self.path = UIBezierPath(cgPath: path.cgPath)
+        self.color = color
+        self.lineWidth = lineWidth
+    }
+}
+
 final class DoodleDrawView: UIView {
     var strokeColor: UIColor = .systemRed {
         didSet { currentPathLayer?.strokeColor = strokeColor.cgColor }
     }
 
     var lineWidth: CGFloat = 6
+    var onStrokeFinished: ((DoodleStroke) -> Void)?
 
-    private var paths: [(UIBezierPath, UIColor)] = []
+    private var strokes: [DoodleStroke] = []
     private var currentPath: UIBezierPath?
     private var currentPathLayer: CAShapeLayer?
+    private var currentStrokeColor: UIColor?
+    private var currentLineWidth: CGFloat = 0
 
-    var hasContent: Bool { !paths.isEmpty || currentPath != nil }
+    var hasContent: Bool { !strokes.isEmpty || currentPath != nil }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -25,10 +47,39 @@ final class DoodleDrawView: UIView {
     }
 
     func clear() {
-        paths.removeAll()
+        strokes.removeAll()
         currentPath = nil
+        currentStrokeColor = nil
         layer.sublayers?.forEach { $0.removeFromSuperlayer() }
         currentPathLayer = nil
+    }
+
+    func removeStroke(id: UUID) {
+        guard let index = strokes.firstIndex(where: { $0.id == id }) else { return }
+        strokes.remove(at: index)
+        rebuildLayers()
+    }
+
+    func restoreStroke(_ stroke: DoodleStroke) {
+        guard !strokes.contains(where: { $0.id == stroke.id }) else { return }
+        strokes.append(stroke)
+        layer.addSublayer(makeLayer(for: stroke))
+    }
+
+    func rescaleContent(from oldSize: CGSize, to newSize: CGSize) {
+        guard oldSize.width > 0, oldSize.height > 0,
+              newSize.width > 0, newSize.height > 0,
+              oldSize != newSize else { return }
+        let scaleX = newSize.width / oldSize.width
+        let scaleY = newSize.height / oldSize.height
+        let lineScale = min(scaleX, scaleY)
+        for stroke in strokes {
+            let path = UIBezierPath(cgPath: stroke.path.cgPath)
+            path.apply(CGAffineTransform(scaleX: scaleX, y: scaleY))
+            stroke.path = path
+            stroke.lineWidth *= lineScale
+        }
+        rebuildLayers()
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -39,14 +90,10 @@ final class DoodleDrawView: UIView {
         path.lineWidth = lineWidth
         path.move(to: point)
         currentPath = path
+        currentStrokeColor = strokeColor
+        currentLineWidth = lineWidth
 
-        let shape = CAShapeLayer()
-        shape.strokeColor = strokeColor.cgColor
-        shape.fillColor = UIColor.clear.cgColor
-        shape.lineWidth = lineWidth
-        shape.lineCap = .round
-        shape.lineJoin = .round
-        shape.path = path.cgPath
+        let shape = makeLayer(path: path, color: strokeColor, lineWidth: lineWidth)
         layer.addSublayer(shape)
         currentPathLayer = shape
     }
@@ -67,11 +114,44 @@ final class DoodleDrawView: UIView {
     }
 
     private func finishStroke() {
-        if let path = currentPath {
-            paths.append((path, strokeColor))
+        if let path = currentPath, let color = currentStrokeColor {
+            let stroke = DoodleStroke(
+                path: path,
+                color: color,
+                lineWidth: currentLineWidth
+            )
+            strokes.append(stroke)
+            onStrokeFinished?(stroke)
         }
         currentPath = nil
+        currentStrokeColor = nil
         currentPathLayer = nil
+    }
+
+    private func rebuildLayers() {
+        layer.sublayers?.forEach { $0.removeFromSuperlayer() }
+        for stroke in strokes {
+            layer.addSublayer(makeLayer(for: stroke))
+        }
+    }
+
+    private func makeLayer(for stroke: DoodleStroke) -> CAShapeLayer {
+        makeLayer(path: stroke.path, color: stroke.color, lineWidth: stroke.lineWidth)
+    }
+
+    private func makeLayer(
+        path: UIBezierPath,
+        color: UIColor,
+        lineWidth: CGFloat
+    ) -> CAShapeLayer {
+        let shape = CAShapeLayer()
+        shape.strokeColor = color.cgColor
+        shape.fillColor = UIColor.clear.cgColor
+        shape.lineWidth = lineWidth
+        shape.lineCap = .round
+        shape.lineJoin = .round
+        shape.path = path.cgPath
+        return shape
     }
 
     override func draw(_ rect: CGRect) {

@@ -5,7 +5,7 @@
 ## Modules
 
 - `YKImageEditorCore`：几何变换、马赛克、滤镜叠色、液化塑形、导出、会话状态
-- `YKImageEditorUI`：UIKit 编辑器界面（含滤镜预设、液化推移）
+- `YKImageEditorUI`：SwiftUI 编辑器界面（画布与精确触摸层通过 UIKit 桥接）
 
 ## Requirements
 
@@ -13,11 +13,17 @@
 - Swift 5.9+
 - 零第三方依赖
 
+## Documentation
+
+- [图片编辑功能技术说明](Docs/ImageEditingTechnicalGuide.md)
+- [踩坑记录](Docs/Pitfalls.md)
+
 ## Usage
 
 ```swift
 import YKImageEditorCore
 import YKImageEditorUI
+import SwiftUI
 
 // 全部功能
 presenting.yk_presentImageEditor(image: image) { result in
@@ -47,9 +53,14 @@ presenting.yk_presentImageEditor(
     config: .all,
     stickerProvider: stickers
 ) { _ in }
+
+// SwiftUI 页面中也可直接使用
+ImageEditorView(image: image, config: .all) { result in
+    // 处理完成或取消
+}
 ```
 
-也可直接使用 `ImageEditorViewController` 自行 `present` / `push`。
+UIKit 项目也可直接使用 `ImageEditorViewController` 自行 `present` / `push`。
 
 ## Example
 

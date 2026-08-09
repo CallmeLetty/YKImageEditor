@@ -42,6 +42,29 @@ final class YKImageEditorCoreTests: XCTestCase {
         XCTAssertEqual(rotated.size.height, 120, accuracy: 1)
     }
 
+    func testRotate90IsClockwiseAndAccumulates() {
+        let image = makeQuadrantImage(width: 40, height: 20)
+
+        let once = ImageGeometry.rotate90(image, quarterTurns: 1)
+        assertPixelColor(once, at: CGPoint(x: 5, y: 5), equals: .blue)
+        assertPixelColor(once, at: CGPoint(x: 15, y: 5), equals: .red)
+        assertPixelColor(once, at: CGPoint(x: 5, y: 35), equals: .yellow)
+        assertPixelColor(once, at: CGPoint(x: 15, y: 35), equals: .green)
+
+        let twice = ImageGeometry.rotate90(once, quarterTurns: 1)
+        assertPixelColor(twice, at: CGPoint(x: 5, y: 5), equals: .yellow)
+        assertPixelColor(twice, at: CGPoint(x: 35, y: 5), equals: .blue)
+        assertPixelColor(twice, at: CGPoint(x: 5, y: 15), equals: .green)
+        assertPixelColor(twice, at: CGPoint(x: 35, y: 15), equals: .red)
+
+        let threeTimes = ImageGeometry.rotate90(twice, quarterTurns: 1)
+        let fourTimes = ImageGeometry.rotate90(threeTimes, quarterTurns: 1)
+        assertPixelColor(fourTimes, at: CGPoint(x: 5, y: 5), equals: .red)
+        assertPixelColor(fourTimes, at: CGPoint(x: 35, y: 5), equals: .green)
+        assertPixelColor(fourTimes, at: CGPoint(x: 5, y: 15), equals: .blue)
+        assertPixelColor(fourTimes, at: CGPoint(x: 35, y: 15), equals: .yellow)
+    }
+
     func testHorizontalFlipSwapsLeftAndRight() {
         let image = makeSplitImage(
             size: CGSize(width: 64, height: 64),
@@ -271,6 +294,23 @@ final class YKImageEditorCoreTests: XCTestCase {
         XCTAssertEqual(result.size, split.size)
     }
 
+    func testLiquifyDeformerRestoresSnapshot() {
+        let deformer = LiquifyDeformer(columns: 16, rows: 16)
+        let original = deformer.snapshot()
+        deformer.apply(
+            at: CGPoint(x: 0.5, y: 0.5),
+            delta: CGPoint(x: 0.1, y: 0),
+            radius: 0.25,
+            strength: 1
+        )
+        XCTAssertTrue(deformer.hasDeformation)
+
+        deformer.restore(from: original)
+
+        XCTAssertFalse(deformer.hasDeformation)
+        XCTAssertEqual(deformer.sourcePoint(forNormalized: CGPoint(x: 0.5, y: 0.5)), CGPoint(x: 0.5, y: 0.5))
+    }
+
     private func makeImage(width: Int, height: Int, color: UIColor) -> UIImage {
         let size = CGSize(width: width, height: height)
         let format = UIGraphicsImageRendererFormat.default()
@@ -293,6 +333,24 @@ final class YKImageEditorCoreTests: XCTestCase {
                 UIColor(red: t, green: 1 - t, blue: 0.5, alpha: 1).setFill()
                 context.fill(CGRect(x: x, y: 0, width: 1, height: height))
             }
+        }
+    }
+
+    private func makeQuadrantImage(width: Int, height: Int) -> UIImage {
+        let size = CGSize(width: width, height: height)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+            let halfWidth = CGFloat(width) / 2
+            let halfHeight = CGFloat(height) / 2
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: halfWidth, height: halfHeight))
+            UIColor.green.setFill()
+            context.fill(CGRect(x: halfWidth, y: 0, width: halfWidth, height: halfHeight))
+            UIColor.blue.setFill()
+            context.fill(CGRect(x: 0, y: halfHeight, width: halfWidth, height: halfHeight))
+            UIColor.yellow.setFill()
+            context.fill(CGRect(x: halfWidth, y: halfHeight, width: halfWidth, height: halfHeight))
         }
     }
 
@@ -351,6 +409,20 @@ final class YKImageEditorCoreTests: XCTestCase {
         var a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
         return (r, g, b)
+    }
+
+    private func assertPixelColor(
+        _ image: UIImage,
+        at point: CGPoint,
+        equals expected: UIColor,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let actualRGB = rgb(pixelColor(of: image, at: point))
+        let expectedRGB = rgb(expected)
+        XCTAssertEqual(actualRGB.r, expectedRGB.r, accuracy: 0.05, file: file, line: line)
+        XCTAssertEqual(actualRGB.g, expectedRGB.g, accuracy: 0.05, file: file, line: line)
+        XCTAssertEqual(actualRGB.b, expectedRGB.b, accuracy: 0.05, file: file, line: line)
     }
 
     private func luminance(_ color: UIColor) -> CGFloat {
