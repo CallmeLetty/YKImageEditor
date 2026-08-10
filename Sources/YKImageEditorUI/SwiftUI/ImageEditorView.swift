@@ -118,6 +118,10 @@ struct ImageEditorContentView: View {
             BlendToolView(model: model)
                 .frame(height: 160)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+        case .tone:
+            ToneToolView(model: model)
+                .frame(height: 148)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
         case .liquify:
             LiquifyToolView(model: model)
                 .frame(height: 138)
@@ -181,7 +185,9 @@ private struct EditorCanvasRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: EditorCanvasHostView, context: Context) {
-        uiView.canvas.setImage(model.currentImage)
+        if uiView.canvas.displayedImage !== model.currentImage {
+            uiView.canvas.setImage(model.currentImage)
+        }
     }
 }
 
@@ -296,6 +302,99 @@ private struct BlendToolView: View {
         }
         .padding(.top, 8)
         .background(Color.black)
+    }
+}
+
+private struct ToneToolView: View {
+    @ObservedObject var model: ImageEditorViewModel
+
+    private var selectedParameter: ToneParameter { model.selectedToneParameter }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                PanelIconButton(systemName: "xmark", emphasized: false, action: model.cancelTone)
+                Text("\(selectedParameter.title) \(formattedValue)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(themeColor(EditorTheme.secondaryText))
+                    .frame(minWidth: 88, alignment: .leading)
+                Spacer(minLength: 8)
+                Button(action: model.resetTone) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 32, height: 32)
+                        .background(themeColor(EditorTheme.chip))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("重置 Tone 滤镜")
+                if model.isProcessing {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(width: 24)
+                }
+                PanelIconButton(systemName: "checkmark", emphasized: true, action: model.applyTone)
+                    .disabled(model.isProcessing)
+            }
+            .padding(.horizontal, 14)
+
+            Slider(
+                value: Binding(
+                    get: { model.toneValue(for: selectedParameter) },
+                    set: { model.setToneValue($0, for: selectedParameter) }
+                ),
+                in: selectedParameter.range,
+                step: selectedParameter.step
+            )
+            .tint(themeColor(EditorTheme.accent))
+            .padding(.horizontal, 14)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(ToneParameter.allCases) { parameter in
+                        Button {
+                            model.selectedToneParameter = parameter
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: parameter.systemImageName)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .frame(width: 20, height: 20)
+                                Text(parameter.title)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .lineLimit(1)
+                                Capsule()
+                                    .fill(
+                                        selectedParameter == parameter
+                                            ? themeColor(EditorTheme.accent)
+                                            : .clear
+                                    )
+                                    .frame(width: 16, height: 2)
+                            }
+                            .foregroundColor(
+                                selectedParameter == parameter
+                                    ? themeColor(EditorTheme.accent)
+                                    : .white
+                            )
+                            .frame(width: 54, height: 48)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 8)
+            }
+        }
+        .padding(.top, 8)
+        .background(Color.black)
+    }
+
+    private var formattedValue: String {
+        let value = model.toneValue(for: selectedParameter)
+        if selectedParameter == .exposure {
+            return String(format: "%+.2f EV", value)
+        }
+        return String(format: "%+.0f", value * 100)
     }
 }
 

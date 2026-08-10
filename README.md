@@ -4,7 +4,7 @@
 
 ## Modules
 
-- `YKImageEditorCore`：几何变换、马赛克、滤镜叠色、液化塑形、导出、会话状态
+- `YKImageEditorCore`：几何变换、马赛克、Blend/Tone 滤镜、液化塑形、导出、会话状态
 - `YKImageEditorUI`：SwiftUI 编辑器界面（画布与精确触摸层通过 UIKit 桥接）
 
 ## Requirements
@@ -39,12 +39,21 @@ let config = EditorConfig.including([.crop, .text])
 // 去掉马赛克
 let config2 = EditorConfig.excluding([.mosaic])
 
-// 只要裁剪 + 滤镜
+// 只要裁剪 + Blend 滤镜
 let config3 = EditorConfig.including([.crop, .blend])
+
+// 只要裁剪 + Tone 滤镜
+let config4 = EditorConfig.including([.crop, .tone])
 
 // 程序化滤镜叠色（无需 UI）
 let toned = ImageBlender.blend(base: image, preset: .warmColorBurn, intensity: 0.7)
 let multiplied = ImageBlender.blend(base: image, color: .orange, mode: .multiply, opacity: 0.5)
+
+// 程序化参数调色（无需 UI）
+let adjusted = ToneFilterProcessor.render(
+    image: image,
+    parameters: ToneFilterParameters(exposure: 0.4, saturation: 0.15)
+)
 
 // 贴纸需注入
 let stickers = ClosureStickerProvider { [UIImage(systemName: "star.fill")!] }

@@ -16,6 +16,8 @@ final class ImageEditorViewModel: NSObject, ObservableObject {
     @Published var selectedPreset: BlendPreset = .warmColorBurn
     @Published var blendIntensity = 0.45
     @Published private(set) var filterThumbnails: [BlendPreset: UIImage] = [:]
+    @Published private(set) var toneParameters = ToneFilterParameters.identity
+    @Published var selectedToneParameter: ToneParameter = .exposure
     @Published private(set) var isProcessing = false
     @Published var liquifyRadius = 0.12 {
         didSet { syncLiquifyBrush() }
@@ -42,6 +44,12 @@ final class ImageEditorViewModel: NSObject, ObservableObject {
     private var cachedBlendEffect: UIImage?
     private var blendRenderGeneration = 0
     private var thumbnailGeneration = 0
+
+    private var toneBaseImage: UIImage?
+    private var tonePreviewBase: UIImage?
+    private var toneRenderGeneration = 0
+    private var isToneRendering = false
+    private var needsToneRender = false
 
     private var liquifySourceImage: UIImage?
     private let liquifyDeformer = LiquifyDeformer(columns: 56, rows: 56)
@@ -98,6 +106,8 @@ final class ImageEditorViewModel: NSObject, ObservableObject {
             isStickerPickerPresented = true
         case .blend:
             startBlend()
+        case .tone:
+            startTone()
         case .liquify:
             startLiquify()
         case .doodle, .mosaic:
@@ -158,6 +168,9 @@ final class ImageEditorViewModel: NSObject, ObservableObject {
         if selectedTool == .blend {
             cancelBlend()
         }
+        if selectedTool == .tone {
+            cancelTone()
+        }
         if selectedTool == .mosaic, canvasHost?.canvas.mosaicMaskView.hasContent == true {
             applyMosaicIfNeeded()
         }
@@ -175,6 +188,9 @@ final class ImageEditorViewModel: NSObject, ObservableObject {
         if selectedTool == .blend {
             cancelBlend()
         }
+        if selectedTool == .tone {
+            cancelTone()
+        }
         if selectedTool == .liquify, redoActions.last?.isLiquifyAction != true {
             cancelLiquify()
         }
@@ -191,9 +207,10 @@ final class ImageEditorViewModel: NSObject, ObservableObject {
             !($0 is DoodleDrawView || $0 is MosaicMaskView)
         } ?? false
         let hasPendingLiquify = liquifySourceImage != nil && liquifyDeformer.hasDeformation
+        let hasPendingTone = toneBaseImage != nil && !toneParameters.isIdentity
         if !undoActions.isEmpty || session.isDirty || hasOverlays
             || canvas?.doodleView.hasContent == true || canvas?.mosaicMaskView.hasContent == true
-            || hasPendingLiquify {
+            || hasPendingLiquify || hasPendingTone {
             isDiscardConfirmationPresented = true
         } else {
             dismissTransientTool(except: nil)
@@ -246,6 +263,75 @@ final class ImageEditorViewModel: NSObject, ObservableObject {
                 guard let self else { return }
                 self.isProcessing = false
                 self.dismissBlend()
+                self.commit(result)
+                self.selectedTool = nil
+                self.syncCanvasInteraction()
+            }
+        }
+    }
+
+    func toneValue(for parameter: ToneParameter) -> Double {
+        switch parameter {
+        case .exposure: return Double(toneParameters.exposure)
+        case .brightness: return Double(toneParameters.brightness)
+        case .contrast: return Double(toneParameters.contrast)
+        case .saturation: return Double(toneParameters.saturation)
+        case .temperature: return Double(toneParameters.temperature)
+        case .highlights: return Double(toneParameters.highlights)
+        case .shadows: return Double(toneParameters.shadows)
+        }
+    }
+
+    func setToneValue(_ value: Double, for parameter: ToneParameter) {
+        guard toneBaseImage != nil else { return }
+        var parameters = toneParameters
+        let value = Float(value)
+        switch parameter {
+        case .exposure: parameters.exposure = value
+        case .brightness: parameters.brightness = value
+        case .contrast: parameters.contrast = value
+        case .saturation: parameters.saturation = value
+        case .temperature: parameters.temperature = value
+        case .highlights: parameters.highlights = value
+        case .shadows: parameters.shadows = value
+        }
+        toneParameters = parameters
+        toneRenderGeneration += 1
+        scheduleTonePreview()
+    }
+
+    func resetTone() {
+        guard !toneParameters.isIdentity else { return }
+        toneParameters = .identity
+        toneRenderGeneration += 1
+        needsToneRender = false
+        canvasHost?.canvas.setPreviewImage(nil)
+    }
+
+    func cancelTone() {
+        isProcessing = false
+        dismissTone()
+        selectedTool = nil
+        syncCanvasInteraction()
+    }
+
+    func applyTone() {
+        guard let base = toneBaseImage else { return }
+        guard !toneParameters.isIdentity else {
+            cancelTone()
+            return
+        }
+        isProcessing = true
+        toneRenderGeneration += 1
+        let generation = toneRenderGeneration
+        needsToneRender = false
+        let parameters = toneParameters
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = ToneFilterProcessor.render(image: base, parameters: parameters)
+            DispatchQueue.main.async {
+                guard let self, generation == self.toneRenderGeneration else { return }
+                self.isProcessing = false
+                self.dismissTone()
                 self.commit(result)
                 self.selectedTool = nil
                 self.syncCanvasInteraction()
@@ -351,6 +437,58 @@ final class ImageEditorViewModel: NSObject, ObservableObject {
         canvasHost?.canvas.setBlendPreview(effect: nil, intensity: 0)
     }
 
+    private func startTone() {
+        toneBaseImage = session.currentImage
+        tonePreviewBase = ImageGeometry.downsample(session.currentImage, maxDimension: 1080)
+        toneParameters = .identity
+        selectedToneParameter = .exposure
+        toneRenderGeneration += 1
+        needsToneRender = false
+        canvasHost?.canvas.setPreviewImage(nil)
+    }
+
+    private func scheduleTonePreview() {
+        guard tonePreviewBase != nil else { return }
+        if toneParameters.isIdentity {
+            needsToneRender = false
+            canvasHost?.canvas.setPreviewImage(nil)
+            return
+        }
+        needsToneRender = true
+        guard !isToneRendering else { return }
+        flushTonePreview()
+    }
+
+    private func flushTonePreview() {
+        guard needsToneRender, let previewBase = tonePreviewBase else { return }
+        needsToneRender = false
+        isToneRendering = true
+        let generation = toneRenderGeneration
+        let parameters = toneParameters
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let preview = ToneFilterProcessor.render(image: previewBase, parameters: parameters)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isToneRendering = false
+                if generation == self.toneRenderGeneration {
+                    self.canvasHost?.canvas.setPreviewImage(preview)
+                }
+                if self.needsToneRender {
+                    self.flushTonePreview()
+                }
+            }
+        }
+    }
+
+    private func dismissTone() {
+        toneRenderGeneration += 1
+        toneBaseImage = nil
+        tonePreviewBase = nil
+        toneParameters = .identity
+        needsToneRender = false
+        canvasHost?.canvas.setPreviewImage(nil)
+    }
+
     private func startLiquify() {
         liquifySourceImage = session.currentImage
         liquifyDeformer.reset()
@@ -377,6 +515,9 @@ final class ImageEditorViewModel: NSObject, ObservableObject {
     private func dismissTransientTool(except tool: EditorTool?) {
         if tool != .blend, blendBaseImage != nil {
             dismissBlend()
+        }
+        if tool != .tone, toneBaseImage != nil {
+            dismissTone()
         }
         if tool != .liquify, liquifySourceImage != nil {
             discardLiquifyHistory()

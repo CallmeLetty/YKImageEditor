@@ -190,9 +190,63 @@ final class YKImageEditorCoreTests: XCTestCase {
         XCTAssertNotNil(result.cgImage)
     }
 
-    func testEditorFeatureAllIncludesBlend() {
+    func testEditorFeatureAllIncludesBlendAndTone() {
         XCTAssertTrue(EditorFeature.all.contains(.blend))
+        XCTAssertTrue(EditorFeature.all.contains(.tone))
         XCTAssertFalse(EditorConfig.excluding([.blend]).isEnabled(.blend))
+        XCTAssertFalse(EditorConfig.excluding([.tone]).isEnabled(.tone))
+    }
+
+    func testToneIdentityReturnsOriginalImage() {
+        let base = makeImage(width: 32, height: 32, color: .systemBlue)
+        let result = ToneFilterProcessor.render(image: base, parameters: .identity)
+
+        XCTAssertTrue(result === base)
+    }
+
+    func testToneExposureBrightensImage() {
+        let base = makeImage(width: 32, height: 32, color: UIColor(white: 0.2, alpha: 1))
+        let result = ToneFilterProcessor.render(
+            image: base,
+            parameters: ToneFilterParameters(exposure: 1)
+        )
+        let baseLuma = luminance(pixelColor(of: base, at: CGPoint(x: 16, y: 16)))
+        let resultLuma = luminance(pixelColor(of: result, at: CGPoint(x: 16, y: 16)))
+
+        XCTAssertGreaterThan(resultLuma, baseLuma)
+    }
+
+    func testToneSaturationMinusOneProducesGrayscale() {
+        let base = makeImage(
+            width: 32,
+            height: 32,
+            color: UIColor(red: 0.9, green: 0.2, blue: 0.1, alpha: 1)
+        )
+        let result = ToneFilterProcessor.render(
+            image: base,
+            parameters: ToneFilterParameters(saturation: -1)
+        )
+        let color = rgb(pixelColor(of: result, at: CGPoint(x: 16, y: 16)))
+
+        XCTAssertEqual(color.r, color.g, accuracy: 0.03)
+        XCTAssertEqual(color.g, color.b, accuracy: 0.03)
+    }
+
+    func testToneFullParameterChainPreservesImageSize() {
+        let base = makeGradientImage(width: 64, height: 48)
+        let result = ToneFilterProcessor.render(
+            image: base,
+            parameters: ToneFilterParameters(
+                brightness: 0.1,
+                contrast: 0.2,
+                temperature: 0.25,
+                highlights: -0.2,
+                shadows: 0.2
+            )
+        )
+
+        XCTAssertEqual(result.size, base.size)
+        XCTAssertNotNil(result.cgImage)
     }
 
     func testLiquifyPushChangesImage() {

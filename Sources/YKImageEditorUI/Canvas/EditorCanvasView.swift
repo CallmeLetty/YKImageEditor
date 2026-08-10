@@ -66,6 +66,10 @@ final class EditorCanvasView: UIView {
         }
     }
 
+    func setPreviewImage(_ image: UIImage?) {
+        setBlendPreview(effect: image, intensity: image == nil ? 0 : 1)
+    }
+
     func beginLiquifyPreview(image: UIImage, deformer: LiquifyDeformer) {
         liquifyPreviewView.begin(image: image, deformer: deformer)
     }

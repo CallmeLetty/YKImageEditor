@@ -26,12 +26,17 @@ public struct EditorFeature: OptionSet, Sendable, Hashable {
     /// 贴纸：缩放、旋转、拖动。素材由调用方通过贴纸 Provider 注入；未注入时 UI 自动隐藏入口。
     public static let sticker = EditorFeature(rawValue: 1 << 4)
 
-    /// 滤镜：以色块/渐变/光效图层按混合模式叠色调色（正片叠底、滤色、柔光等）。
+    /// Blend 滤镜：以色块/渐变/光效图层按混合模式叠色调色。
     public static let blend = EditorFeature(rawValue: 1 << 5)
 
     /// 液化：推移塑形（推脸、微调轮廓）。
     public static let liquify = EditorFeature(rawValue: 1 << 6)
 
+    /// Tone 滤镜：曝光、亮度、对比度、饱和度、色温、高光和阴影调整。
+    public static let tone = EditorFeature(rawValue: 1 << 7)
+
     /// 全部功能（默认）。
-    public static let all: EditorFeature = [.crop, .doodle, .text, .mosaic, .sticker, .blend, .liquify]
+    public static let all: EditorFeature = [
+        .crop, .doodle, .text, .mosaic, .sticker, .blend, .liquify, .tone
+    ]
 }
