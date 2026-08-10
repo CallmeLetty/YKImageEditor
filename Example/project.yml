@@ -26,6 +26,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 选择图片进行编辑
         INFOPLIST_KEY_NSCameraUsageDescription: 拍照后进行编辑
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - package: YKImageEditor
         product: YKImageEditorUI
