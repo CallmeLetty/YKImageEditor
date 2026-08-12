@@ -23,15 +23,39 @@ public final class ClosureStickerProvider: StickerProviding {
 }
 
 enum StickerImageRendering {
+    private static let minimumRasterizedTemplateSide: CGFloat = 160
+
     static func resolvedImage(_ image: UIImage) -> UIImage {
         if image.renderingMode == .alwaysOriginal {
-            return image
+            let minimumSide = image.isSymbolImage ? minimumRasterizedTemplateSide : nil
+            return rasterizedOriginalImage(image, minimumSide: minimumSide)
         }
 
         if image.isSymbolImage || image.renderingMode == .alwaysTemplate {
-            return image.withTintColor(EditorTheme.accent, renderingMode: .alwaysOriginal)
+            let tintedImage = image.withTintColor(EditorTheme.accent, renderingMode: .alwaysOriginal)
+            return rasterizedOriginalImage(tintedImage, minimumSide: minimumRasterizedTemplateSide)
         }
 
         return image.withRenderingMode(.alwaysOriginal)
+    }
+
+    /// 将符号图或模板图固定成原色位图，避免深色环境下再次继承外部 tint。
+    private static func rasterizedOriginalImage(_ image: UIImage, minimumSide: CGFloat? = nil) -> UIImage {
+        var size = image.size
+        if let minimumSide, max(size.width, size.height) > 0 {
+            let scale = minimumSide / max(size.width, size.height)
+            if scale > 1 {
+                size = CGSize(width: size.width * scale, height: size.height * scale)
+            }
+        }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = max(image.scale, UIScreen.main.scale)
+        format.opaque = false
+
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }.withRenderingMode(.alwaysOriginal)
     }
 }
